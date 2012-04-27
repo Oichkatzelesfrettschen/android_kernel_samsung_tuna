@@ -413,8 +413,12 @@ int __secure_computing(int this_syscall)
 			goto skip;
 		case SECCOMP_RET_TRACE:
 			/* Skip these calls if there is no tracer. */
-			if (!(current->ptrace & PT_TRACE_SECCOMP))
+			if (!(current->ptrace & PT_TRACE_SECCOMP)) {
+				/* Make sure userspace sees an ENOSYS. */
+				syscall_set_return_value(current,
+					task_pt_regs(current), -ENOSYS, 0);
 				goto skip;
+			}
 			/* Allow the BPF to provide the event message */
 			ptrace_event(PT_TRACE_SECCOMP, PTRACE_EVENT_SECCOMP, data);
 			/*
