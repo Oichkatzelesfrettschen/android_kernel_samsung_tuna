@@ -531,6 +531,7 @@ int sk_chk_filter(struct sock_filter *filter, int flen)
 		[BPF_JMP|BPF_JSET|BPF_X] = BPF_S_JMP_JSET_X,
 	};
 	int pc;
+	bool anc_found;
 
 	if (flen == 0 || flen > BPF_MAXINSNS)
 		return -EINVAL;
@@ -591,8 +592,10 @@ int sk_chk_filter(struct sock_filter *filter, int flen)
 		case BPF_S_LD_W_ABS:
 		case BPF_S_LD_H_ABS:
 		case BPF_S_LD_B_ABS:
+			anc_found = false;
 #define ANCILLARY(CODE) case SKF_AD_OFF + SKF_AD_##CODE:	\
 				code = BPF_S_ANC_##CODE;	\
+				anc_found = true;		\
 				break
 			switch (ftest->k) {
 			ANCILLARY(PROTOCOL);
@@ -609,6 +612,10 @@ int sk_chk_filter(struct sock_filter *filter, int flen)
 			ANCILLARY(VLAN_TAG);
 			ANCILLARY(VLAN_TAG_PRESENT);
 			}
+
+			/* ancillary operation unknown or unsupported */
+			if (anc_found == false && ftest->k >= SKF_AD_OFF)
+				return -EINVAL;
 		}
 		ftest->code = code;
 	}
