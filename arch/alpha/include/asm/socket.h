@@ -69,6 +69,8 @@
 
 #define SO_RXQ_OVFL             40
 
+#define SO_LOCK_FILTER		44
+
 #ifdef __KERNEL__
 /* O_NONBLOCK clashes with the bits used for socket types.  Therefore we
  * have to define SOCK_NONBLOCK to a different value here.

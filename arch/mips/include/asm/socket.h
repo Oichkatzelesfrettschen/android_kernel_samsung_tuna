@@ -82,6 +82,8 @@ To add: #define SO_REUSEPORT 0x0200	/* Allow local address and port reuse.  */
 
 #define SO_RXQ_OVFL             40
 
+#define SO_LOCK_FILTER		44
+
 #ifdef __KERNEL__
 
 /** sock_type - Socket types

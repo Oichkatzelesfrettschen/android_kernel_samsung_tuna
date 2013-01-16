@@ -708,6 +708,13 @@ set_rcvbuf:
 		ret = sk_detach_filter(sk);
 		break;
 
+	case SO_LOCK_FILTER:
+		if (sock_flag(sk, SOCK_FILTER_LOCKED) && !valbool)
+			ret = -EPERM;
+		else
+			sock_valbool_flag(sk, SOCK_FILTER_LOCKED, valbool);
+		break;
+
 	case SO_PASSSEC:
 		if (valbool)
 			set_bit(SOCK_PASSSEC, &sock->flags);
@@ -954,6 +961,10 @@ int sock_getsockopt(struct socket *sock, int level, int optname,
 
 	case SO_RXQ_OVFL:
 		v.val = !!sock_flag(sk, SOCK_RXQ_OVFL);
+		break;
+
+	case SO_LOCK_FILTER:
+		v.val = sock_flag(sk, SOCK_FILTER_LOCKED);
 		break;
 
 	default:

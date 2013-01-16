@@ -61,6 +61,8 @@
 
 #define SO_RXQ_OVFL             0x4021
 
+#define SO_LOCK_FILTER		0x4025
+
 /* O_NONBLOCK clashes with the bits used for socket types.  Therefore we
  * have to define SOCK_NONBLOCK to a different value here.
  */

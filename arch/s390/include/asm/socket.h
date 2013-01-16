@@ -70,4 +70,6 @@
 
 #define SO_RXQ_OVFL             40
 
+#define SO_LOCK_FILTER		44
+
 #endif /* _ASM_SOCKET_H */
