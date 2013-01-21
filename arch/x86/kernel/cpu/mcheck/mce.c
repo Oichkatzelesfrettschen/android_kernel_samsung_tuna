@@ -993,7 +993,7 @@ void do_machine_check(struct pt_regs *regs, long error_code)
 		/*
 		 * Set taint even when machine check was not enabled.
 		 */
-		add_taint(TAINT_MACHINE_CHECK);
+		add_taint(TAINT_MACHINE_CHECK, LOCKDEP_NOW_UNRELIABLE);
 
 		mce_get_rip(&m, regs);
 		severity = mce_severity(&m, tolerant, NULL);

@@ -81,7 +81,7 @@ void die_if_kernel(char *str, struct pt_regs *fp, int nr)
 	printk(KERN_EMERG "Process %s (pid: %d, stackpage=%08lx)\n",
 		current->comm, current->pid, PAGE_SIZE+(unsigned long)current);
 	show_stack(NULL, (unsigned long *)(fp + 1));
-	add_taint(TAINT_DIE);
+	add_taint(TAINT_DIE, LOCKDEP_NOW_UNRELIABLE);
 	do_exit(SIGSEGV);
 }
 
