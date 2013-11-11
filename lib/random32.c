@@ -129,9 +129,30 @@ core_initcall(random32_init);
  *	Generate better values after random number generator
  *	is fully initialized.
  */
-static int __init random32_reseed(void)
+static void __random32_reseed(bool late)
 {
 	int i;
+	unsigned long flags;
+	static bool latch = false;
+	static DEFINE_SPINLOCK(lock);
+
+	/*
+	 * The late reseed runs from credit_entropy_bits() once the
+	 * nonblocking pool initializes, which can happen inside the
+	 * get_random_bytes() call below while the early reseed holds the
+	 * lock; the late path therefore gives up instead of spinning.
+	 */
+	if (late) {
+		if (!spin_trylock_irqsave(&lock, flags))
+			return;
+	} else {
+		spin_lock_irqsave(&lock, flags);
+	}
+
+	/* only allow initial seeding (late == false) once */
+	if (latch && !late)
+		goto out;
+	latch = true;
 
 	for_each_possible_cpu(i) {
 		struct rnd_state *state = &per_cpu(net_rand_state,i);
@@ -145,6 +166,18 @@ static int __init random32_reseed(void)
 		/* mix it in */
 		prandom32(state);
 	}
+out:
+	spin_unlock_irqrestore(&lock, flags);
+}
+
+void prandom_reseed_late(void)
+{
+	__random32_reseed(true);
+}
+
+static int __init random32_reseed(void)
+{
+	__random32_reseed(false);
 	return 0;
 }
 late_initcall(random32_reseed);

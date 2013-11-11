@@ -68,6 +68,7 @@ unsigned long randomize_range(unsigned long start, unsigned long end, unsigned l
 
 u32 random32(void);
 void srandom32(u32 seed);
+void prandom_reseed_late(void);
 
 u32 prandom32(struct rnd_state *);
 
