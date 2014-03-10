@@ -945,7 +945,7 @@ first_try:
 		if (io_data->aio) {
 			req = usb_ep_alloc_request(ep->ep, GFP_KERNEL);
 			if (unlikely(!req))
-				goto error;
+				goto error_lock;
 
 			req->buf      = data;
 			req->length   = io_data->len;
@@ -960,7 +960,7 @@ first_try:
 			ret = usb_ep_queue(ep->ep, req, GFP_ATOMIC);
 			if (unlikely(ret)) {
 				usb_ep_free_request(ep->ep, req);
-				goto error;
+				goto error_lock;
 			}
 			ret = -EIOCBQUEUED;
 			/* ffs_user_copy_worker() frees data. */
@@ -996,6 +996,12 @@ first_try:
 		}
 	}
 
+	mutex_unlock(&epfile->mutex);
+	kfree(data);
+	return ret;
+
+error_lock:
+	spin_unlock_irq(&epfile->ffs->eps_lock);
 	mutex_unlock(&epfile->mutex);
 error:
 	kfree(data);
