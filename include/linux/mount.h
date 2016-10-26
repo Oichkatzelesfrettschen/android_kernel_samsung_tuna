@@ -87,6 +87,7 @@ struct vfsmount {
 	int mnt_expiry_mark;		/* true if marked for expiry */
 	int mnt_pinned;
 	int mnt_ghosts;
+	void *data;
 };
 
 struct file; /* forward dec */
