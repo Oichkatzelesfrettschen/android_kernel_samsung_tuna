@@ -454,6 +454,24 @@ static struct socket *sockfd_lookup_light(int fd, int *err, int *fput_needed)
 	return NULL;
 }
 
+static int sockfs_setattr(struct dentry *dentry, struct iattr *iattr)
+{
+	int err = simple_setattr(dentry, iattr);
+
+	if (!err && (iattr->ia_valid & ATTR_UID)) {
+		struct socket *sock = SOCKET_I(dentry->d_inode);
+
+		if (sock->sk)
+			sock->sk->sk_uid = iattr->ia_uid;
+	}
+
+	return err;
+}
+
+static const struct inode_operations sockfs_inode_ops = {
+	.setattr = sockfs_setattr,
+};
+
 /**
  *	sock_alloc	-	allocate a socket
  *
@@ -478,6 +496,7 @@ static struct socket *sock_alloc(void)
 	inode->i_mode = S_IFSOCK | S_IRWXUGO;
 	inode->i_uid = current_fsuid();
 	inode->i_gid = current_fsgid();
+	inode->i_op = &sockfs_inode_ops;
 
 	percpu_add(sockets_in_use, 1);
 	return sock;
