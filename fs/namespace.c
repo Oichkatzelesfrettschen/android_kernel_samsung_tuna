@@ -224,6 +224,7 @@ static struct vfsmount *alloc_vfsmnt(const char *name)
 		mnt->mnt_count = 1;
 		mnt->mnt_writers = 0;
 #endif
+		mnt->data = NULL;
 
 		INIT_LIST_HEAD(&mnt->mnt_hash);
 		INIT_LIST_HEAD(&mnt->mnt_child);
@@ -687,11 +688,9 @@ vfs_kern_mount(struct file_system_type *type, int flags, const char *name, void 
 	if (!mnt)
 		return ERR_PTR(-ENOMEM);
 
-	mnt->data = NULL;
 	if (type->alloc_mnt_data) {
 		mnt->data = type->alloc_mnt_data();
 		if (!mnt->data) {
-			mnt_free_id(mnt);
 			free_vfsmnt(mnt);
 			return ERR_PTR(-ENOMEM);
 		}
@@ -701,7 +700,6 @@ vfs_kern_mount(struct file_system_type *type, int flags, const char *name, void 
 
 	root = mount_fs(type, flags, name, mnt, data);
 	if (IS_ERR(root)) {
-		kfree(mnt->data);
 		free_vfsmnt(mnt);
 		return ERR_CAST(root);
 	}
@@ -776,7 +774,6 @@ static struct vfsmount *clone_mnt(struct vfsmount *old, struct dentry *root,
 	return mnt;
 
  out_free:
-	kfree(mnt->data);
 	free_vfsmnt(mnt);
 	return ERR_PTR(err);
 }
