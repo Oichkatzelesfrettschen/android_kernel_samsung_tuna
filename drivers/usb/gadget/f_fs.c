@@ -942,7 +942,7 @@ first_try:
 		struct usb_request *req;
 
 		if (io_data->aio) {
-			req = usb_ep_alloc_request(ep->ep, GFP_KERNEL);
+			req = usb_ep_alloc_request(ep->ep, GFP_ATOMIC);
 			if (unlikely(!req)) {
 				ret = -ENOMEM;
 				goto error_lock;
