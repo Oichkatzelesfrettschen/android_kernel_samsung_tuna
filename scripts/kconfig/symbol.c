@@ -971,7 +971,11 @@ static void sym_check_print_recursive(struct symbol *last_sym)
 	struct symbol *sym, *next_sym;
 	struct menu *menu = NULL;
 	struct property *prop;
-	struct dep_stack cv_stack;
+	/*
+	 * check_top is global, so the node it may point to is static; the
+	 * function takes it off the stack again on every return path.
+	 */
+	static struct dep_stack cv_stack;
 
 	if (sym_is_choice_value(last_sym)) {
 		dep_stack_insert(&cv_stack, last_sym);
@@ -983,7 +987,7 @@ static void sym_check_print_recursive(struct symbol *last_sym)
 			break;
 	if (!stack) {
 		fprintf(stderr, "unexpected recursive dependency error\n");
-		return;
+		goto out;
 	}
 
 	for (; stack; stack = stack->next) {
@@ -1033,6 +1037,7 @@ static void sym_check_print_recursive(struct symbol *last_sym)
 		}
 	}
 
+out:
 	if (check_top == &cv_stack)
 		dep_stack_remove();
 }
