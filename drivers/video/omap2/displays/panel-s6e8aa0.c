@@ -775,7 +775,13 @@ static void s6e8aa0_setup_gamma_regs(struct s6e8aa0_data *s6, u8 gamma_regs[],
 			adj = clamp_t(int, adj, adj_min, adj_max);
 		}
 #ifdef CONFIG_COLOR_CONTROL
-		gamma_regs[gamma_reg_index(c, V1)] = min(max(adj +  v1_offset[c], 0), 255);
+		/*
+		 * adj is at most V1_ADJ_MAX, so it converts to int exactly;
+		 * the sum must stay signed for a negative v1_offset to clamp
+		 * at 0 rather than wrap to 255.
+		 */
+		gamma_regs[gamma_reg_index(c, V1)] =
+			clamp_t(int, (int)adj + v1_offset[c], 0, 255);
 #else
 		gamma_regs[gamma_reg_index(c, V1)] = adj;
 #endif
