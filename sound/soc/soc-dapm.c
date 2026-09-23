@@ -1553,7 +1553,12 @@ static int dapm_power_widgets(struct snd_soc_dapm_context *dapm, int event)
 			dapm->dev_power = 1;
 			break;
 		case SND_SOC_DAPM_STREAM_STOP:
-#warning need re-work
+			/*
+			 * A platform or DAI context has no codec whose
+			 * activity could keep it powered, so it powers down;
+			 * upstream dapm_power_widgets() resolves the NULL
+			 * codec the same way from 3.3 on.
+			 */
 			if (dapm->codec)
 				dapm->dev_power = !!dapm->codec->active;
 			else
