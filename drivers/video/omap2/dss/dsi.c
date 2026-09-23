@@ -4715,6 +4715,8 @@ static void dsi_display_uninit_dsi(struct omap_dss_device *dssdev,
 	dsi_pll_uninit(dsidev, disconnect_lanes);
 }
 
+#ifndef CONFIG_MACH_TUNA
+/* Tuna skips the DSI soft reset in omapdss_dsi_display_enable(). */
 static int _dsi_wait_reset(struct platform_device *dsidev)
 {
 	int t = 0;
@@ -4729,6 +4731,7 @@ static int _dsi_wait_reset(struct platform_device *dsidev)
 
 	return 0;
 }
+#endif
 
 int omapdss_dsi_display_enable(struct omap_dss_device *dssdev)
 {
