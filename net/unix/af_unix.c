@@ -213,6 +213,11 @@ static int unix_mkname(struct sockaddr_un *sunaddr, int len, unsigned *hashp)
 		 */
 		((char *)sunaddr)[len] = 0;
 		len = strlen(sunaddr->sun_path)+1+sizeof(short);
+		/*
+		 * A filesystem name is hashed by inode at bind time, not by
+		 * name; *hashp is still defined on every successful return.
+		 */
+		*hashp = 0;
 		return len;
 	}
 
