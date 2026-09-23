@@ -3371,19 +3371,16 @@ int tcp_nuke_addr(struct net *net, struct sockaddr *addr)
 	int family = addr->sa_family;
 	unsigned int bucket;
 
-	struct in_addr *in;
+	/*
+	 * Each family's address is taken inside the branch that tests the
+	 * family, so every use is dominated by its assignment.
+	 */
+	if (family != AF_INET
 #if defined(CONFIG_IPV6) || defined(CONFIG_IPV6_MODULE)
-	struct in6_addr *in6;
+	    && family != AF_INET6
 #endif
-	if (family == AF_INET) {
-		in = &((struct sockaddr_in *)addr)->sin_addr;
-#if defined(CONFIG_IPV6) || defined(CONFIG_IPV6_MODULE)
-	} else if (family == AF_INET6) {
-		in6 = &((struct sockaddr_in6 *)addr)->sin6_addr;
-#endif
-	} else {
+	    )
 		return -EAFNOSUPPORT;
-	}
 
 	for (bucket = 0; bucket <= tcp_hashinfo.ehash_mask; bucket++) {
 		struct hlist_nulls_node *node;
@@ -3401,6 +3398,8 @@ restart:
 				continue;
 
 			if (family == AF_INET) {
+				const struct in_addr *in =
+					&((struct sockaddr_in *)addr)->sin_addr;
 				__be32 s4 = inet->inet_rcv_saddr;
 				if (s4 == LOOPBACK4_IPV6)
 					continue;
@@ -3413,6 +3412,8 @@ restart:
 
 #if defined(CONFIG_IPV6) || defined(CONFIG_IPV6_MODULE)
 			if (family == AF_INET6) {
+				const struct in6_addr *in6 =
+					&((struct sockaddr_in6 *)addr)->sin6_addr;
 				struct in6_addr *s6;
 				if (!inet->pinet6)
 					continue;
