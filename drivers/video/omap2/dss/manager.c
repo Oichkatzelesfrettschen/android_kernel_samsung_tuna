@@ -1167,6 +1167,22 @@ static int configure_overlay(enum omap_plane plane)
 	return 0;
 }
 
+/*
+ * The manager writeback sources OMAP_WB_LCD1, OMAP_WB_TV and OMAP_WB_LCD2
+ * capture the managers that drive OMAP_DSS_CHANNEL_LCD, _DIGIT and _LCD2.
+ */
+static enum omap_channel wb_source_channel(enum omap_writeback_source source)
+{
+	switch (source) {
+	case OMAP_WB_TV:
+		return OMAP_DSS_CHANNEL_DIGIT;
+	case OMAP_WB_LCD2:
+		return OMAP_DSS_CHANNEL_LCD2;
+	default:
+		return OMAP_DSS_CHANNEL_LCD;
+	}
+}
+
 static void configure_manager(enum omap_channel channel)
 {
 	struct manager_cache_data *c;
@@ -1354,7 +1370,8 @@ static int configure_dispc(void)
 				 * source pipe is switched off. */
 				for (i = 0; i < num_ovls; ++i) {
 					oc = &dss_cache.overlay_cache[i];
-					if (oc->channel == wbc->source &&
+					if (oc->channel ==
+						wb_source_channel(wbc->source) &&
 						!oc->enabled) {
 						dispc_setup_wb_source(
 							OMAP_DSS_GFX + i);
