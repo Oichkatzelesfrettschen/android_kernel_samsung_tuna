@@ -61,7 +61,7 @@ void revert_fsids(const struct cred *old_cred)
 }
 
 static int sdcardfs_create(struct inode *dir, struct dentry *dentry,
-			 umode_t mode, struct nameidata *nd)
+			 int mode, struct nameidata *nd)
 {
 	int err = 0;
 	struct dentry *lower_dentry;
@@ -280,7 +280,7 @@ static int touch(char *abs_path, mode_t mode)
 	return 0;
 }
 
-static int sdcardfs_mkdir(struct inode *dir, struct dentry *dentry, umode_t mode)
+static int sdcardfs_mkdir(struct inode *dir, struct dentry *dentry, int mode)
 {
 	int err = 0;
 	int make_nomedia_in_obb = 0;
@@ -647,7 +647,8 @@ static void sdcardfs_put_link(struct dentry *dentry, struct nameidata *nd,
 }
 #endif
 
-static int sdcardfs_permission_wrn(struct inode *inode, int mask)
+static int sdcardfs_permission_wrn(struct inode *inode, int mask,
+				   unsigned int flags)
 {
 	WARN_RATELIMIT(1, "sdcardfs does not support permission. Use permission2.\n");
 	return -EINVAL;
@@ -672,7 +673,8 @@ void copy_attrs(struct inode *dest, const struct inode *src)
 #endif
 }
 
-static int sdcardfs_permission(struct vfsmount *mnt, struct inode *inode, int mask)
+static int sdcardfs_permission(struct vfsmount *mnt, struct inode *inode,
+			       int mask, unsigned int flags)
 {
 	int err;
 	struct inode tmp;
@@ -703,7 +705,7 @@ static int sdcardfs_permission(struct vfsmount *mnt, struct inode *inode, int ma
 	tmp.i_sb = inode->i_sb;
 	if (IS_POSIXACL(inode))
 		pr_warn("%s: This may be undefined behavior...\n", __func__);
-	err = generic_permission(&tmp, mask);
+	err = generic_permission(&tmp, mask, flags, NULL);
 	/* XXX
 	 * Original sdcardfs code calls inode_permission(lower_inode,.. )
 	 * for checking inode permission. But doing such things here seems
