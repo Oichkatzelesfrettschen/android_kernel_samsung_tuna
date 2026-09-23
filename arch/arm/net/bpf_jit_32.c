@@ -11,6 +11,7 @@
 #include <linux/bitops.h>
 #include <linux/compiler.h>
 #include <linux/errno.h>
+#include <linux/rcupdate.h>
 #include <linux/filter.h>
 #include <linux/moduleloader.h>
 #include <linux/netdevice.h>
@@ -439,7 +440,7 @@ static inline void emit_blx_r(u8 tgt_reg, struct jit_ctx *ctx)
 
 static inline void emit_udiv(u8 rd, u8 rm, u8 rn, struct jit_ctx *ctx)
 {
-#if __LINUX_ARM_ARCH__ == 7
+#if __LINUX_ARM_ARCH__ == 7 && defined(HWCAP_IDIVA)
 	if (elf_hwcap & HWCAP_IDIVA) {
 		emit(ARM_UDIV(rd, rm, rn), ctx);
 		return;
