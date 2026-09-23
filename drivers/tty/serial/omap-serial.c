@@ -278,8 +278,15 @@ static inline void receive_chars(struct uart_omap_port *up, int *status)
 	int max_count = 256;
 
 	do {
+		/*
+		 * A break or error can be flagged with UART_LSR_DR clear, and
+		 * then no byte is waiting in UART_RX; the tty layer receives
+		 * NUL with the error flag, as serial8250_rx_chars() does.
+		 */
 		if (likely(lsr & UART_LSR_DR))
 			ch = serial_in(up, UART_RX);
+		else
+			ch = 0;
 		flag = TTY_NORMAL;
 		up->port.icount.rx++;
 
