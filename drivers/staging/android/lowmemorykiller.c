@@ -175,6 +175,8 @@ static int lowmem_shrink(struct shrinker *s, struct shrink_control *sc)
 	int selected_oom_score_adj;
 	int array_size = ARRAY_SIZE(lowmem_adj);
 	unsigned long nr_to_scan = sc->nr_to_scan;
+	int other_free;
+	int other_file;
 
 	rcu_read_lock();
 	tsk = current->group_leader;
@@ -190,9 +192,9 @@ static int lowmem_shrink(struct shrinker *s, struct shrink_control *sc)
 			return 0;
 	}
 
-	int other_free = global_page_state(NR_FREE_PAGES) - totalreserve_pages;
-	int other_file = global_page_state(NR_FILE_PAGES) -
-						global_page_state(NR_SHMEM);
+	other_free = global_page_state(NR_FREE_PAGES) - totalreserve_pages;
+	other_file = global_page_state(NR_FILE_PAGES) -
+					global_page_state(NR_SHMEM);
 
 	tune_lmk_param(&other_free, &other_file, sc);
 
