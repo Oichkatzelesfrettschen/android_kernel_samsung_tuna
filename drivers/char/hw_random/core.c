@@ -53,8 +53,20 @@
 
 
 static struct hwrng *current_rng;
+/*
+ * khwrngd runs while rng_list is non-empty.  It exits only through
+ * kthread_stop(), so the task pointer stays valid for the stopper.
+ * Written under both hwrng_dev_mutex and rng_mutex.
+ */
 static struct task_struct *hwrng_fill;
 static LIST_HEAD(rng_list);
+/*
+ * Serializes hwrng_register() and hwrng_unregister(), which create and
+ * remove the misc device and khwrngd when rng_list becomes non-empty or
+ * empty.  Taken before rng_mutex.  khwrngd and the sysfs handlers never
+ * take it, so misc_deregister() and kthread_stop() may run under it.
+ */
+static DEFINE_MUTEX(hwrng_dev_mutex);
 /* Protects rng_list and current_rng */
 static DEFINE_MUTEX(rng_mutex);
 /* Protects rng read functions, data_avail, rng_buffer and rng_fillbuf */
@@ -64,7 +76,32 @@ static u8 *rng_buffer, *rng_fillbuf;
 static unsigned short current_quality;
 static unsigned short default_quality; /* = 0; default to "off" */
 
-module_param(current_quality, ushort, 0644);
+static void wake_khwrngd(void);
+
+static int param_set_current_quality(const char *val,
+				     const struct kernel_param *kp)
+{
+	int err;
+
+	err = param_set_ushort(val, kp);
+	if (err)
+		return err;
+
+	mutex_lock(&rng_mutex);
+	if (current_quality > 1024)
+		current_quality = 1024;
+	wake_khwrngd();
+	mutex_unlock(&rng_mutex);
+	return 0;
+}
+
+static struct kernel_param_ops current_quality_ops = {
+	.set = param_set_current_quality,
+	.get = param_get_ushort,
+};
+
+module_param_cb(current_quality, &current_quality_ops, &current_quality,
+		0644);
 MODULE_PARM_DESC(current_quality,
 		 "current hwrng entropy estimation per mill");
 module_param(default_quality, ushort, 0644);
@@ -73,7 +110,6 @@ MODULE_PARM_DESC(default_quality,
 
 static void drop_current_rng(void);
 static int hwrng_init(struct hwrng *rng);
-static void start_khwrngd(void);
 
 static inline int rng_get_data(struct hwrng *rng, u8 *buffer, size_t size,
 			       int wait);
@@ -117,6 +153,7 @@ static int set_current_rng(struct hwrng *rng)
 
 	drop_current_rng();
 	current_rng = rng;
+	wake_khwrngd();
 
 	return 0;
 }
@@ -182,11 +219,6 @@ skip_init:
 	current_quality = rng->quality ? : default_quality;
 	if (current_quality > 1024)
 		current_quality = 1024;
-
-	if (current_quality == 0 && hwrng_fill)
-		kthread_stop(hwrng_fill);
-	if (current_quality > 0 && !hwrng_fill)
-		start_khwrngd();
 
 	return 0;
 }
@@ -415,16 +447,37 @@ err_misc_dereg:
 	goto out;
 }
 
+/*
+ * Sleep until @timeout passes, kthread_stop() is called, or, for an idle
+ * wait, a current RNG with non-zero quality appears.  The condition is
+ * rechecked after the task state is set, so a wake_khwrngd() that races
+ * with the check still ends the sleep.
+ */
+static void hwrng_fill_sleep(long timeout, bool idle)
+{
+	set_current_state(TASK_INTERRUPTIBLE);
+	if (!kthread_should_stop() &&
+	    (!idle || !ACCESS_ONCE(current_rng) || !ACCESS_ONCE(current_quality)))
+		schedule_timeout(timeout);
+	__set_current_state(TASK_RUNNING);
+}
+
 static int hwrng_fillfn(void *unused)
 {
 	long rc;
 
 	while (!kthread_should_stop()) {
 		struct hwrng *rng;
+		unsigned short quality;
 
 		rng = get_current_rng();
-		if (IS_ERR(rng) || !rng)
-			break;
+		quality = ACCESS_ONCE(current_quality);
+		if (IS_ERR_OR_NULL(rng) || !quality) {
+			if (!IS_ERR_OR_NULL(rng))
+				put_rng(rng);
+			hwrng_fill_sleep(MAX_SCHEDULE_TIMEOUT, true);
+			continue;
+		}
 		mutex_lock(&reading_mutex);
 		rc = rng_get_data(rng, rng_fillbuf,
 				  rng_buffer_size(), 1);
@@ -432,24 +485,55 @@ static int hwrng_fillfn(void *unused)
 		put_rng(rng);
 		if (rc <= 0) {
 			pr_warn("hwrng: no data available\n");
-			msleep_interruptible(10000);
+			hwrng_fill_sleep(10 * HZ, false);
 			continue;
 		}
 		/* Outside lock, sure, but y'know: randomness. */
 		add_hwgenerator_randomness((void *)rng_fillbuf, rc,
-					   rc * current_quality * 8 >> 10);
+					   rc * quality * 8 >> 10);
 	}
-	hwrng_fill = NULL;
 	return 0;
 }
 
+/* Called with rng_mutex held, after current_rng or current_quality changes. */
+static void wake_khwrngd(void)
+{
+	BUG_ON(!mutex_is_locked(&rng_mutex));
+	if (hwrng_fill)
+		wake_up_process(hwrng_fill);
+}
+
+/* Called with hwrng_dev_mutex held and rng_mutex released. */
 static void start_khwrngd(void)
 {
-	hwrng_fill = kthread_run(hwrng_fillfn, NULL, "hwrng");
-	if (IS_ERR(hwrng_fill)) {
-		pr_err("hwrng_fill thread creation failed");
-		hwrng_fill = NULL;
+	struct task_struct *task;
+
+	if (hwrng_fill)
+		return;
+
+	task = kthread_run(hwrng_fillfn, NULL, "hwrng");
+	if (IS_ERR(task)) {
+		pr_err("hwrng_fill thread creation failed\n");
+		return;
 	}
+
+	mutex_lock(&rng_mutex);
+	hwrng_fill = task;
+	mutex_unlock(&rng_mutex);
+}
+
+/* Called with hwrng_dev_mutex held and rng_mutex released. */
+static void stop_khwrngd(void)
+{
+	struct task_struct *task;
+
+	mutex_lock(&rng_mutex);
+	task = hwrng_fill;
+	hwrng_fill = NULL;
+	mutex_unlock(&rng_mutex);
+
+	if (task)
+		kthread_stop(task);
 }
 
 int hwrng_register(struct hwrng *rng)
@@ -461,6 +545,7 @@ int hwrng_register(struct hwrng *rng)
 	    (rng->data_read == NULL && rng->read == NULL))
 		goto out;
 
+	mutex_lock(&hwrng_dev_mutex);
 	mutex_lock(&rng_mutex);
 
 	/* kmalloc makes this safe for virt_to_page() in virtio_rng.c */
@@ -472,10 +557,8 @@ int hwrng_register(struct hwrng *rng)
 	}
 	if (!rng_fillbuf) {
 		rng_fillbuf = kmalloc(rng_buffer_size(), GFP_KERNEL);
-		if (!rng_fillbuf) {
-			kfree(rng_buffer);
+		if (!rng_fillbuf)
 			goto out_unlock;
-		}
 	}
 
 	/* Must not register two RNGs with the same name. */
@@ -516,6 +599,9 @@ int hwrng_register(struct hwrng *rng)
 
 out_unlock:
 	mutex_unlock(&rng_mutex);
+	if (!err)
+		start_khwrngd();
+	mutex_unlock(&hwrng_dev_mutex);
 out:
 	return err;
 }
@@ -523,6 +609,7 @@ EXPORT_SYMBOL_GPL(hwrng_register);
 
 void hwrng_unregister(struct hwrng *rng)
 {
+	mutex_lock(&hwrng_dev_mutex);
 	mutex_lock(&rng_mutex);
 
 	list_del(&rng->list);
@@ -540,10 +627,10 @@ void hwrng_unregister(struct hwrng *rng)
 	if (list_empty(&rng_list)) {
 		mutex_unlock(&rng_mutex);
 		unregister_miscdev();
-		if (hwrng_fill)
-			kthread_stop(hwrng_fill);
+		stop_khwrngd();
 	} else
 		mutex_unlock(&rng_mutex);
+	mutex_unlock(&hwrng_dev_mutex);
 
 	wait_for_completion(&rng->cleanup_done);
 }
