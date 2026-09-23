@@ -77,6 +77,11 @@ extern struct ip_ra_chain __rcu *ip_ra_chain;
 #define IP_MF		0x2000		/* Flag: "More Fragments"	*/
 #define IP_OFFSET	0x1FFF		/* "Fragment Offset" part	*/
 
+static inline bool ip_is_fragment(const struct iphdr *iph)
+{
+	return (iph->frag_off & htons(IP_MF | IP_OFFSET)) != 0;
+}
+
 #define IP_FRAG_TIME	(30 * HZ)		/* fragment lifetime	*/
 
 struct msghdr;

@@ -1,5 +1,5 @@
 #include <linux/skbuff.h>
-#include <linux/export.h>
+#include <linux/module.h>
 #include <linux/ip.h>
 #include <linux/ipv6.h>
 #include <linux/if_vlan.h>
