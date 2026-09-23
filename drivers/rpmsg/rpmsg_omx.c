@@ -131,7 +131,9 @@ static LIST_HEAD(rpmsg_omx_services_list);
 #define ION_1D_END	0xBFD00000
 #define ION_1D_VA	0x88000000
 
+#ifdef CONFIG_CMA_DEBUG
 static u32 max_iobufs_addr = ION_1D_VA;
+#endif
 
 static int _rpmsg_pa_to_da(u32 pa, u32 *da)
 {
