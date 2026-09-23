@@ -928,6 +928,15 @@ asmlinkage int syscall_trace(int why, struct pt_regs *regs, int scno)
 {
 	unsigned long ip;
 
+	/*
+	 * seccomp reads the syscall number through syscall_get_nr(), so record
+	 * it before filtering. A -1 return makes __sys_trace skip the call and
+	 * arm_syscall() hand back the r0 the filter set.
+	 */
+	current_thread_info()->syscall = scno;
+	if (why == 0 && secure_computing(scno) == -1)
+		return -1;
+
 	if (!test_thread_flag(TIF_SYSCALL_TRACE))
 		return scno;
 	if (!(current->ptrace & PT_PTRACED))
