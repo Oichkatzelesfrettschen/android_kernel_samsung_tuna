@@ -333,6 +333,7 @@ load_b:
 			continue;
 		case BPF_S_ANC_ALU_XOR_X:
 			A ^= X;
+			continue;
 		case BPF_S_ANC_VLAN_TAG:
 			A = vlan_tx_tag_get(skb);
 			continue;
