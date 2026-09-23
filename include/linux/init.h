@@ -156,7 +156,7 @@ void prepare_namespace(void);
 
 extern void (*late_time_init)(void);
 
-extern int initcall_debug;
+extern bool initcall_debug;
 
 #endif
   

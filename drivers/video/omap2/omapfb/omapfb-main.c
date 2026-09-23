@@ -44,9 +44,9 @@
 
 static char *def_mode;
 static char *def_vram;
-static int def_vrfb;
+static bool def_vrfb;
 static int def_rotate;
-static int def_mirror;
+static bool def_mirror;
 
 /* Max 4 framebuffers assumed : FB-ix-W-H */
 #define MAX_FB_COUNT	4
@@ -65,9 +65,9 @@ module_param_array(fb_opt, int, NULL, 0);
 MODULE_PARM_DESC(fb_opt, "FB[ix][w][h]");
 
 #ifdef DEBUG
-unsigned int omapfb_debug;
+bool omapfb_debug;
 module_param_named(debug, omapfb_debug, bool, 0644);
-static unsigned int omapfb_test_pattern;
+static bool omapfb_test_pattern;
 module_param_named(test, omapfb_test_pattern, bool, 0644);
 #endif
 
