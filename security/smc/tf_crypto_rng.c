@@ -25,6 +25,7 @@
 
 #include <linux/types.h>
 #include <linux/module.h>
+#include <linux/mutex.h>
 #include <linux/slab.h>
 #include <linux/hw_random.h>
 
@@ -41,7 +42,13 @@
 #define SERVICE_SYSTEM_PKCS11_C_OPEN_SESSION_COMMAND_ID		0x00000042
 #define SERVICE_SYSTEM_PKCS11_C_CLOSE_SESSION_COMMAND_ID	0x00000043
 
-static struct hwrng tf_crypto_rng;
+/*
+ * Entropy credited per 1024 bits of output.  C_GenerateRandom returns the
+ * output of the PA's PKCS#11 generator, whose construction and seeding
+ * from the OMAP4 RNG module are not documented outside the PA, so the
+ * driver claims half of full entropy rather than all of it.
+ */
+#define TF_CRYPTO_RNG_QUALITY	512
 
 static int tf_crypto_rng_read(struct hwrng *rng, void *data, size_t max,
 	bool wait)
@@ -149,20 +156,64 @@ free_buf:
 	return err ? err : len;
 }
 
+static struct hwrng tf_crypto_rng = {
+	.name		= "rng-smc",
+	.read		= tf_crypto_rng_read,
+	.quality	= TF_CRYPTO_RNG_QUALITY,
+};
+
+/*
+ * The hwrng is registered only while the PA runs: tf_daemon loads the PA
+ * from userspace after init has already probed /dev/hw_random, and every
+ * TEEC call before the load fails.  Callbacks are serialized by the TF
+ * driver's tf_pa_state_lock, which also orders them against
+ * tf_crypto_rng_exit().
+ */
+static bool tf_crypto_rng_registered;
+
+static int tf_crypto_rng_pa_event(struct notifier_block *nb,
+	unsigned long event, void *unused)
+{
+	int err;
+
+	switch (event) {
+	case TF_PA_EVENT_STARTED:
+		if (tf_crypto_rng_registered)
+			break;
+		err = hwrng_register(&tf_crypto_rng);
+		if (err) {
+			pr_err("%s: hwrng_register failed (%d)\n",
+				__func__, err);
+			break;
+		}
+		tf_crypto_rng_registered = true;
+		break;
+
+	case TF_PA_EVENT_STOPPING:
+		if (!tf_crypto_rng_registered)
+			break;
+		/* Returns after every in-flight read has finished. */
+		hwrng_unregister(&tf_crypto_rng);
+		tf_crypto_rng_registered = false;
+		break;
+	}
+
+	return NOTIFY_OK;
+}
+
+static struct notifier_block tf_crypto_rng_nb = {
+	.notifier_call = tf_crypto_rng_pa_event,
+};
+
 static int __init tf_crypto_rng_init(void)
 {
-	memset(&tf_crypto_rng, 0, sizeof(struct hwrng));
-
-	tf_crypto_rng.name = "rng-smc";
-	tf_crypto_rng.read = tf_crypto_rng_read;
-
-	return hwrng_register(&tf_crypto_rng);
+	return tf_pa_register_notifier(&tf_crypto_rng_nb);
 }
 module_init(tf_crypto_rng_init);
 
 static void __exit tf_crypto_rng_exit(void)
 {
-	hwrng_unregister(&tf_crypto_rng);
+	tf_pa_unregister_notifier(&tf_crypto_rng_nb);
 }
 module_exit(tf_crypto_rng_exit);
 

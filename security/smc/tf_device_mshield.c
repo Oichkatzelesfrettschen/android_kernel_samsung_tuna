@@ -40,6 +40,7 @@
 #include "tf_conn.h"
 #include "tf_comm.h"
 #include "tf_zebra.h"
+#include "tf_teec.h"
 
 #include "s_version.h"
 
@@ -129,6 +130,53 @@ static int tf_ctrl_device_release(struct inode *inode, struct file *file)
 	dpr_info("%s(%p): Success\n", __func__, file);
 	return 0;
 }
+
+/*----------------------------------------------------------------------------*/
+
+/*
+ * PA availability as seen by in-kernel TEEC clients.  tf_pa_up changes
+ * only under tf_pa_state_lock, and every change runs the chain with the
+ * lock held, so a client's register and unregister callbacks never
+ * overlap.  The lock nests inside dev->dev_mutex; clients call back into
+ * the secure world through TEEC, which takes neither lock.
+ */
+static DEFINE_MUTEX(tf_pa_state_lock);
+static RAW_NOTIFIER_HEAD(tf_pa_chain);
+static bool tf_pa_up;
+
+static void tf_pa_set_state(bool up)
+{
+	mutex_lock(&tf_pa_state_lock);
+	if (tf_pa_up != up) {
+		tf_pa_up = up;
+		raw_notifier_call_chain(&tf_pa_chain,
+			up ? TF_PA_EVENT_STARTED : TF_PA_EVENT_STOPPING, NULL);
+	}
+	mutex_unlock(&tf_pa_state_lock);
+}
+
+int tf_pa_register_notifier(struct notifier_block *nb)
+{
+	int error;
+
+	mutex_lock(&tf_pa_state_lock);
+	error = raw_notifier_chain_register(&tf_pa_chain, nb);
+	if (!error && tf_pa_up)
+		nb->notifier_call(nb, TF_PA_EVENT_STARTED, NULL);
+	mutex_unlock(&tf_pa_state_lock);
+	return error;
+}
+EXPORT_SYMBOL_GPL(tf_pa_register_notifier);
+
+void tf_pa_unregister_notifier(struct notifier_block *nb)
+{
+	mutex_lock(&tf_pa_state_lock);
+	if (tf_pa_up)
+		nb->notifier_call(nb, TF_PA_EVENT_STOPPING, NULL);
+	raw_notifier_chain_unregister(&tf_pa_chain, nb);
+	mutex_unlock(&tf_pa_state_lock);
+}
+EXPORT_SYMBOL_GPL(tf_pa_unregister_notifier);
 
 /*----------------------------------------------------------------------------*/
 
@@ -247,9 +295,10 @@ static long tf_ctrl_device_ioctl(struct file *file, unsigned int ioctl_num,
 			omap_smc_free_memory();
 #endif
 			dpr_err("SMC: start failed\n");
-		}
-		else
+		} else {
 			dpr_info("SMC: started\n");
+			tf_pa_set_state(true);
+		}
 
 start_exit:
 #ifndef CONFIG_MACH_TUNA
@@ -261,11 +310,15 @@ start_exit:
 	case TF_PA_CTRL_STOP:
 		dpr_info("%s(%p): Stop the SMC PA\n", __func__, file);
 
+		tf_pa_set_state(false);
 		result = tf_power_management(&dev->sm,
 			TF_POWER_OPERATION_SHUTDOWN);
-		if (result)
+		if (result) {
 			dpr_err("SMC: stop failed [0x%x]\n", result);
-		else {
+			/* The PA keeps running after a failed shutdown. */
+			tf_pa_set_state(test_bit(TF_COMM_FLAG_PA_AVAILABLE,
+				&dev->sm.flags));
+		} else {
 			dpr_info("SMC: stopped\n");
 #ifdef CONFIG_CMA
 			omap_smc_free_memory();

@@ -28,6 +28,24 @@
 TEEC_Result TEEC_encode_error(int err);
 int TEEC_decode_error(TEEC_Result ret);
 
+#include <linux/notifier.h>
+
+/*
+ * Secure world availability events.  TF_PA_EVENT_STARTED follows a
+ * successful PA load; TF_PA_EVENT_STOPPING precedes a PA shutdown, and a
+ * TEEC client must finish every call before its callback returns.
+ */
+#define TF_PA_EVENT_STARTED	1
+#define TF_PA_EVENT_STOPPING	2
+
+/*
+ * Registration replays TF_PA_EVENT_STARTED when the PA is already
+ * running, and unregistration replays TF_PA_EVENT_STOPPING, so a client
+ * sees balanced events whenever it attaches.
+ */
+int tf_pa_register_notifier(struct notifier_block *nb);
+void tf_pa_unregister_notifier(struct notifier_block *nb);
+
 #endif /* defined(CONFIG_TF_TEEC) */
 
 #endif  /* !defined(__TF_TEEC_H__) */
