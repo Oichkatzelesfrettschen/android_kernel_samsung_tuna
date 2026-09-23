@@ -82,8 +82,6 @@ generic_acl_set(struct dentry *dentry, const char *name, const void *value,
 			return PTR_ERR(acl);
 	}
 	if (acl) {
-		mode_t mode;
-
 		error = posix_acl_valid(acl);
 		if (error)
 			goto failed;
@@ -96,7 +94,6 @@ generic_acl_set(struct dentry *dentry, const char *name, const void *value,
 				posix_acl_release(saved_acl);
 			if (error)
 				goto failed;
-			inode->i_mode = mode;
 			inode->i_ctime = CURRENT_TIME;
 			break;
 		}
