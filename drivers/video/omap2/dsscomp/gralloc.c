@@ -573,8 +573,12 @@ int dsscomp_gralloc_queue(struct dsscomp_setup_dispc_data *d,
 			oi->uv += fbi_uv->fix.smem_start;
 			goto skip_map1d;
 		} else if (oi->addressing == OMAP_DSS_BUFADDR_ION) {
-			ion_phys_frm_dev(omap_ion_device,
-			(struct ion_handle *)oi->ba, &phys, &tiler2d_size);
+			if (ion_phys_frm_dev(omap_ion_device,
+					(struct ion_handle *)oi->ba, &phys,
+					&tiler2d_size)) {
+				WARN(1, "layer %d names no ion handle", i);
+				goto skip_buffer;
+			}
 
 			tilview_create(&view, phys, d->ovls[0].cfg.crop.w,
 						d->ovls[0].cfg.crop.h);

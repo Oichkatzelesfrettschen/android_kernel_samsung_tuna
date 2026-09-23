@@ -407,32 +407,30 @@ static bool ion_handle_validate(struct ion_client *client, struct ion_handle *ha
 	return (idr_find(&client->idr, handle->id) == handle);
 }
 
-static bool ion_handle_validate_frm_dev(struct ion_device *dev,
-					struct ion_handle *handle)
+/*
+ * Find the client that owns @handle by comparing pointers only, so a
+ * pointer that names no live handle is rejected without being
+ * dereferenced.  Returns with that client's lock held, or NULL.  The
+ * caller holds dev->lock for reading, which keeps every client on
+ * dev->clients alive; ion_client_destroy() unlinks a client under
+ * dev->lock before it frees the client's handles.
+ */
+static struct ion_client *ion_handle_lock_owner(struct ion_device *dev,
+						struct ion_handle *handle)
 {
-	struct rb_node **p;
-	struct rb_node *parent = NULL;
-	struct ion_client *client;
-	struct rb_node *n;
+	struct rb_node *c, *h;
 
-	p = &dev->clients.rb_node;
-	while (*p) {
-		parent = *p;
-		client = rb_entry(parent, struct ion_client, node);
+	for (c = rb_first(&dev->clients); c; c = rb_next(c)) {
+		struct ion_client *client = rb_entry(c, struct ion_client,
+						     node);
 
-		n = client->handles.rb_node;
-		while (n) {
-			struct ion_handle *handle_node =
-					rb_entry(n, struct ion_handle, node);
-			if (handle < handle_node)
-				n = n->rb_left;
-			else if (handle > handle_node)
-				n = n->rb_right;
-			else
-				return true;
-		}
+		mutex_lock(&client->lock);
+		for (h = rb_first(&client->handles); h; h = rb_next(h))
+			if (rb_entry(h, struct ion_handle, node) == handle)
+				return client;
+		mutex_unlock(&client->lock);
 	}
-	return false;
+	return NULL;
 }
 
 static int ion_handle_add(struct ion_client *client, struct ion_handle *handle)
@@ -583,23 +581,27 @@ EXPORT_SYMBOL(ion_phys);
 int ion_phys_frm_dev(struct ion_device *dev, struct ion_handle *handle,
 	     ion_phys_addr_t *addr, size_t *len)
 {
+	struct ion_client *client;
 	struct ion_buffer *buffer;
 	int ret;
 
-	/* TBD: Investigate why this validate_frm_dev is taking very long
-	* Once root-caused and fixed, then enable this below logic.
-	*/
-	/* if (!ion_handle_validate_frm_dev(dev, handle))
+	down_read(&dev->lock);
+	client = ion_handle_lock_owner(dev, handle);
+	if (!client) {
+		up_read(&dev->lock);
 		return -EINVAL;
-	*/
+	}
 
 	buffer = handle->buffer;
-
 	if (!buffer->heap->ops->phys) {
 		pr_err("%s: ion_phys is not implemented by this heap.\n", __func__);
-		return -ENODEV;
+		ret = -ENODEV;
+	} else {
+		ret = buffer->heap->ops->phys(buffer->heap, buffer, addr, len);
 	}
-	ret = buffer->heap->ops->phys(buffer->heap, buffer, addr, len);
+
+	mutex_unlock(&client->lock);
+	up_read(&dev->lock);
 	return ret;
 }
 EXPORT_SYMBOL(ion_phys_frm_dev);
@@ -810,6 +812,15 @@ void ion_client_destroy(struct ion_client *client)
 	struct rb_node *n;
 
 	pr_debug("%s: %d\n", __func__, __LINE__);
+
+	/*
+	 * Unlink first: ion_phys_frm_dev() walks dev->clients under
+	 * dev->lock and must never reach handles being freed.
+	 */
+	down_write(&dev->lock);
+	rb_erase(&client->node, &dev->clients);
+	up_write(&dev->lock);
+
 	while ((n = rb_first(&client->handles))) {
 		struct ion_handle *handle = rb_entry(n, struct ion_handle,
 						     node);
@@ -822,7 +833,6 @@ void ion_client_destroy(struct ion_client *client)
 	down_write(&dev->lock);
 	if (client->task)
 		put_task_struct(client->task);
-	rb_erase(&client->node, &dev->clients);
 	debugfs_remove_recursive(client->debug_root);
 	up_write(&dev->lock);
 
@@ -1342,6 +1352,7 @@ static int ion_debug_heap_show(struct seq_file *s, void *unused)
 	seq_printf(s, "%16.s %16.s %16.s\n", "client", "pid", "size");
 	seq_printf(s, "----------------------------------------------------\n");
 
+	down_read(&dev->lock);
 	for (n = rb_first(&dev->clients); n; n = rb_next(n)) {
 		struct ion_client *client = rb_entry(n, struct ion_client,
 						     node);
@@ -1359,6 +1370,7 @@ static int ion_debug_heap_show(struct seq_file *s, void *unused)
 				   client->pid, size);
 		}
 	}
+	up_read(&dev->lock);
 	seq_printf(s, "----------------------------------------------------\n");
 	seq_printf(s, "orphaned allocations (info is from last known client):"
 		   "\n");
