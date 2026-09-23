@@ -198,8 +198,8 @@ dm_bind(struct usb_configuration *c, struct usb_function *f)
 		goto fail;
 	dm->port.out = ep;
 	ep->driver_data = cdev;	/* claim */
-	printk(KERN_INFO "[%s]   in =0x%x , out =0x%x\n", __func__,
-				dm->port.in, dm->port.out);
+	printk(KERN_INFO "[%s]   in =%s , out =%s\n", __func__,
+				dm->port.in->name, dm->port.out->name);
 
 	/* copy descriptors, and track endpoint copies */
 	f->descriptors = usb_copy_descriptors(dm_fs_function);

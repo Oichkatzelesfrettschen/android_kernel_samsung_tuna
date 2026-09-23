@@ -49,6 +49,11 @@
 #include "f_mass_storage.c"
 #include "u_serial.c"
 #include "f_acm.c"
+/*
+ * f_dm.c uses composite.h's DBG(cdev, ...); u_ether.c below replaces DBG
+ * with its own eth_dev form, so f_dm.c is included ahead of it.
+ */
+#include "f_dm.c"
 #include "f_adb.c"
 #include "f_mtp.c"
 #include "f_accessory.c"
@@ -56,7 +61,6 @@
 #include "f_rndis.c"
 #include "rndis.c"
 #include "u_ether.c"
-#include "f_dm.c"
 
 MODULE_AUTHOR("Mike Lockwood");
 MODULE_DESCRIPTION("Android Composite USB Driver");
