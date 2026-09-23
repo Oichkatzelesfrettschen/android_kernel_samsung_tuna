@@ -204,7 +204,7 @@ static int __init vibrator_init(void)
 
 	vibdata.gptimer = omap_dm_timer_request_specific(VIB_GPTIMER_NUM);
 	if (vibdata.gptimer == NULL)
-		return -1;
+		return -ENODEV;
 
 #ifdef CONFIG_OMAP_DM_TIMER_DEBUG
 	omap_dm_timer_dump_regs(vibdata.gptimer);
@@ -231,11 +231,11 @@ err_to_dev_reg:
 
 #ifdef CONFIG_OMAP_DM_TIMER_DEBUG
 err_dm_timer_init:
+#endif
 	omap_dm_timer_free(vibdata.gptimer);
 	vibdata.gptimer = NULL;
 
-	return -1;
-#endif
+	return ret;
 }
 
 static int __init omap4_tuna_vibrator_init(void)
