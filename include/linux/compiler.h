@@ -232,6 +232,8 @@ static __always_inline void __assign_once_size(volatile void *p, void *res, int 
 #define ASSIGN_ONCE(val, x) \
 	({ typeof(x) __val; __val = val; __assign_once_size(&x, &__val, sizeof(__val)); __val; })
 
+#define WRITE_ONCE(x, val) ASSIGN_ONCE(val, x)
+
 #endif /* __KERNEL__ */
 
 #endif /* __ASSEMBLY__ */
