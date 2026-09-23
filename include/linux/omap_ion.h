@@ -65,14 +65,22 @@ bool omap_ion_rpmsg_allocate_memory(void);
 bool omap_ion_rpmsg_free_memory(void);
 #endif
 
-/* additional heaps used only on omap */
-enum {
-	OMAP_ION_HEAP_SYSTEM = ION_HEAP_TYPE_CUSTOM + 1,
-	OMAP_ION_HEAP_SECURE_INPUT,
-	OMAP_ION_HEAP_TILER,
-	OMAP_ION_HEAP_NONSECURE_TILER,
-	OMAP_ION_HEAP_TILER_RESERVATION,
-};
+/*
+ * Additional heaps used only on omap.  Each value names both a heap id and,
+ * for the types the omap ion driver implements, a struct ion_heap type, so
+ * the constants carry enum ion_heap_type and extend it past
+ * ION_HEAP_TYPE_CUSTOM.
+ */
+#define OMAP_ION_HEAP_SYSTEM \
+	((enum ion_heap_type)(ION_HEAP_TYPE_CUSTOM + 1))
+#define OMAP_ION_HEAP_SECURE_INPUT \
+	((enum ion_heap_type)(ION_HEAP_TYPE_CUSTOM + 2))
+#define OMAP_ION_HEAP_TILER \
+	((enum ion_heap_type)(ION_HEAP_TYPE_CUSTOM + 3))
+#define OMAP_ION_HEAP_NONSECURE_TILER \
+	((enum ion_heap_type)(ION_HEAP_TYPE_CUSTOM + 4))
+#define OMAP_ION_HEAP_TILER_RESERVATION \
+	((enum ion_heap_type)(ION_HEAP_TYPE_CUSTOM + 5))
 
 #define OMAP_ION_HEAP_TILER_MASK (1 << OMAP_ION_HEAP_TILER)
 #define OMAP_ION_HEAP_NONSECURE_TILER_MASK (1 << OMAP_ION_HEAP_NONSECURE_TILER)
