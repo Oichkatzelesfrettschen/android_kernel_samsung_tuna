@@ -84,13 +84,6 @@ void mmc_fixup_device(struct mmc_card *card, const struct mmc_fixup *table)
 }
 EXPORT_SYMBOL(mmc_fixup_device);
 
-/* GCC 4.8 and above mangle the eMMC firmware patching code... */
-#if __GNUC__ > 4 || ( __GNUC__ == 4 && __GNUC_MINOR__ >= 8 )
-#pragma GCC push_options
-/* As a workaround, drop the optimization level */
-#pragma GCC optimize ("O1")
-#endif
-
 /*
  * Quirk code to fix bug in wear leveling firmware for certain Samsung emmc
  * chips
@@ -172,12 +165,21 @@ static int mmc_movi_erase_cmd(struct mmc_card *card,
 #define TEST_MMC_FW_PATCHING
 
 #if defined(CONFIG_MMC_SAMSUNG_SMART) || defined(TEST_MMC_FW_PATCHING)
-static struct mmc_command wcmd;
-static struct mmc_data wdata;
-
+/*
+ * Every field of the request, command and data the host driver reads must
+ * be set: omap_hsmmc sends brq.sbc as CMD23 when it is non-NULL, so a
+ * request left partly uninitialized on the stack issues whatever command
+ * the stack held.
+ *
+ * TODO(mmc_set_wearlevel_page): confirm the wear-level patch read-back on
+ * a part that matches MMC_QUIRK_SAMSUNG_WL_PATCH (firmware revision 0x25)
+ * with this file built at the tree's default optimization level.
+ */
 static int mmc_movi_read_cmd(struct mmc_card *card, u8 *buffer)
 {
-	struct mmc_request brq;
+	struct mmc_request brq = {0};
+	struct mmc_command wcmd = {0};
+	struct mmc_data wdata = {0};
 	struct scatterlist sg;
 
 	brq.cmd = &wcmd;
@@ -475,7 +477,3 @@ ssize_t mmc_samsung_smart_handle(struct mmc_card *card, char *buf)
 	return len;
 }
 #endif /* CONFIG_MMC_SAMSUNG_SMART */
-
-#if __GNUC__ > 4 || ( __GNUC__ == 4 && __GNUC_MINOR__ >= 8 )
-#pragma GCC pop_options
-#endif
