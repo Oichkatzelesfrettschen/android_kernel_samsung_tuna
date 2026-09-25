@@ -27,6 +27,7 @@
 #include <linux/device.h>
 #include <linux/file.h>
 #include <linux/mm.h>
+#include <linux/highmem.h>
 #include <linux/fs.h>
 #include <linux/anon_inodes.h>
 #include <linux/list.h>
@@ -55,7 +56,7 @@ static struct dsscomp_platform_info platform_info;
 static u32 hwc_virt_to_phys(u32 arg)
 {
 	pmd_t *pmd;
-	pte_t *ptep;
+	pte_t *ptep, pte;
 
 	pgd_t *pgd = pgd_offset(current->mm, arg);
 	if (pgd_none(*pgd) || pgd_bad(*pgd))
@@ -65,9 +66,16 @@ static u32 hwc_virt_to_phys(u32 arg)
 	if (pmd_none(*pmd) || pmd_bad(*pmd))
 		return 0;
 
+	/*
+	 * With CONFIG_HIGHPTE the pte page may sit in HighMem, and
+	 * pte_offset_map() takes a kmap_atomic() slot and disables page
+	 * faults until pte_unmap(); copy the entry and release it at once.
+	 */
 	ptep = pte_offset_map(pmd, arg);
-	if (ptep && pte_present(*ptep))
-		return (PAGE_MASK & *ptep) | (~PAGE_MASK & arg);
+	pte = *ptep;
+	pte_unmap(ptep);
+	if (pte_present(pte))
+		return (PAGE_MASK & pte) | (~PAGE_MASK & arg);
 
 	return 0;
 }
