@@ -25,6 +25,7 @@
 #include <linux/sched.h>	/* current */
 #include <linux/mm.h>
 #include <linux/mm_types.h>
+#include <linux/highmem.h>	/* pte_offset_map() with HIGHPTE */
 #include <asm/mach/map.h>	/* for ioremap_page */
 
 #include "_tiler.h"
@@ -151,7 +152,7 @@ void tiler_iface_init(struct tiler_ops *tiler)
 u32 tiler_virt2phys(u32 usr)
 {
 	pmd_t *pmd;
-	pte_t *ptep;
+	pte_t *ptep, pte;
 	pgd_t *pgd = pgd_offset(current->mm, usr);
 
 	if (pgd_none(*pgd) || pgd_bad(*pgd))
@@ -161,9 +162,16 @@ u32 tiler_virt2phys(u32 usr)
 	if (pmd_none(*pmd) || pmd_bad(*pmd))
 		return 0;
 
+	/*
+	 * With CONFIG_HIGHPTE the pte page may sit in HighMem, and
+	 * pte_offset_map() takes a kmap_atomic() slot and disables page
+	 * faults until pte_unmap(); copy the entry and release it at once.
+	 */
 	ptep = pte_offset_map(pmd, usr);
-	if (ptep && pte_present(*ptep))
-		return (*ptep & PAGE_MASK) | (~PAGE_MASK & usr);
+	pte = *ptep;
+	pte_unmap(ptep);
+	if (pte_present(pte))
+		return (pte & PAGE_MASK) | (~PAGE_MASK & usr);
 
 	return 0;
 }
