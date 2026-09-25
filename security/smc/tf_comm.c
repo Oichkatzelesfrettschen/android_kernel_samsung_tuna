@@ -463,8 +463,10 @@ u32 tf_get_l2_descriptor_common(u32 vaddr, struct mm_struct *mm)
 			hwpte = (u32 *) (ptep - PTRS_PER_PTE);
 #endif
 			if (((*hwpte) & L2_DESCRIPTOR_ADDR_MASK) !=
-					((*ptep) & L2_DESCRIPTOR_ADDR_MASK))
+					((*ptep) & L2_DESCRIPTOR_ADDR_MASK)) {
+				pte_unmap(ptep);
 				goto error;
+			}
 			dprintk_desc(KERN_INFO "hw descr=%x\n", *hwpte);
 			tex = ((*hwpte) >> 6) & 7;
 			pte_unmap(ptep);
