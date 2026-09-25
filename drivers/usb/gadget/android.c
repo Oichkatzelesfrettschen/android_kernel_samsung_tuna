@@ -269,10 +269,13 @@ static void ffs_function_enable(struct android_usb_function *f)
 	/* Disable the gadget until the function is ready */
 	if (!config->opened) {
 		android_disable(dev);
-	} else {
+	} else if (!test_bit(FFS_FL_BOUND, &config->data->flags)) {
 		/*
 		 * Call functionfs_bind to handle the case where userspace
-		 * passed descriptors before updating enabled functions list
+		 * passed descriptors before updating enabled functions list.
+		 * functionfs_ready_callback() binds whenever descriptors
+		 * arrive, and functionfs_bind() WARNs and returns -EBADFD on
+		 * an instance that is already bound.
 		 */
 		ret = functionfs_bind(config->data, dev->cdev);
 		if (ret)
