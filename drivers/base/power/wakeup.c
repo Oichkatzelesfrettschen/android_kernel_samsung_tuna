@@ -151,8 +151,10 @@ EXPORT_SYMBOL_GPL(wakeup_source_register);
  */
 void wakeup_source_unregister(struct wakeup_source *ws)
 {
-	wakeup_source_remove(ws);
-	wakeup_source_destroy(ws);
+	if (ws) {
+		wakeup_source_remove(ws);
+		wakeup_source_destroy(ws);
+	}
 }
 EXPORT_SYMBOL_GPL(wakeup_source_unregister);
 
