@@ -37,12 +37,27 @@
 
 /**
  * struct omx_pvr_data - metadata passed to/from userspace for a pvr register
- * @fd:           a file descriptor representing a pvr handle
+ * @fds:          the ION buffer fds of a gralloc buffer, one per plane; an
+ *                unused plane is negative. DDK 1.12 and newer allocate
+ *                gralloc buffers from ION, so each fd imports as a dma-buf.
  * @num_handles:  field filled by driver. userspace uses this to determine
- *                number of handles associated with fd
+ *                number of handles associated with fds
  * @handles:      opaque pointers pointing to buffers
  */
 struct omx_pvr_data {
+	int fds[2];
+	unsigned int num_handles;
+	void *handles[2];
+};
+
+/**
+ * struct omx_pvr_data_v1 - the pvr register of DDK 1.9 and older
+ * @fd:           a file descriptor representing a pvr handle, resolved through
+ *                the SGX-KM's export_fd_to_ion_handles()
+ * @num_handles:  field filled by driver
+ * @handles:      opaque pointers pointing to buffers
+ */
+struct omx_pvr_data_v1 {
 	int fd;
 	unsigned int num_handles;
 	void *handles[2];
@@ -54,6 +69,7 @@ struct omx_pvr_data {
 #define OMX_IOCIONREGISTER	_IOWR(OMX_IOC_MAGIC, 2, struct ion_fd_data)
 #define OMX_IOCIONUNREGISTER	_IOWR(OMX_IOC_MAGIC, 3, struct ion_fd_data)
 #define OMX_IOCPVRREGISTER	_IOWR(OMX_IOC_MAGIC, 4, struct omx_pvr_data)
+#define OMX_IOCPVRREGISTER_V1	_IOWR(OMX_IOC_MAGIC, 4, struct omx_pvr_data_v1)
 
 #define OMX_IOC_MAXNR	(4)
 

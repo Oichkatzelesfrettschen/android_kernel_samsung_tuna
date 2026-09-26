@@ -559,6 +559,44 @@ long rpmsg_omx_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 	case OMX_IOCPVRREGISTER:
 	{
 		struct omx_pvr_data data;
+		unsigned int i;
+
+		if (copy_from_user(&data, (char __user *)arg, sizeof(data))) {
+			dev_err(omxserv->dev,
+				"%s: %d: copy_from_user fail: %d\n", __func__,
+				_IOC_NR(cmd), ret);
+			return -EFAULT;
+		}
+
+		/*
+		 * Each plane is an ION dma-buf; its handle is released by
+		 * OMX_IOCIONUNREGISTER like a buffer from OMX_IOCIONREGISTER.
+		 */
+		data.num_handles = 0;
+		for (i = 0; i < ARRAY_SIZE(data.fds); i++) {
+			struct ion_handle *handle = NULL;
+
+			if (data.fds[i] >= 0)
+				handle = ion_import_dma_buf(omx->ion_client,
+							    data.fds[i]);
+			if (IS_ERR_OR_NULL(handle))
+				handle = NULL;
+			data.handles[i] = handle;
+			if (handle)
+				data.num_handles = i + 1;
+		}
+
+		if (copy_to_user((char __user *)arg, &data, sizeof(data))) {
+			dev_err(omxserv->dev,
+				"%s: %d: copy_to_user fail: %d\n", __func__,
+				_IOC_NR(cmd), ret);
+			return -EFAULT;
+		}
+		break;
+	}
+	case OMX_IOCPVRREGISTER_V1:
+	{
+		struct omx_pvr_data_v1 data;
 		struct ion_handle *ion_handles[2] = { NULL, NULL };
 		int num_handles = 2, i = 0;
 
