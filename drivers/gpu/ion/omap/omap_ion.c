@@ -49,6 +49,10 @@ int omap_ion_nonsecure_tiler_alloc(struct ion_client *client,
 }
 EXPORT_SYMBOL(omap_ion_nonsecure_tiler_alloc);
 
+/* Bytes of struct omap_ion_tiler_alloc_data that userspace owns. */
+#define OMAP_ION_TILER_ALLOC_UABI_SIZE \
+	offsetof(struct omap_ion_tiler_alloc_data, out_align)
+
 long omap_ion_ioctl(struct ion_client *client, unsigned int cmd,
 		    unsigned long arg)
 {
@@ -63,14 +67,28 @@ long omap_ion_ioctl(struct ion_client *client, unsigned int cmd,
 			       "heap exists on this platform\n", __func__);
 			return -EINVAL;
 		}
-		if (copy_from_user(&data, (void __user *)arg, sizeof(data)))
+		/*
+		 * The userspace ABI ends at @offset: the PowerVR gralloc
+		 * passes a structure of w, h, fmt, flags, handle, stride and
+		 * offset, so the bytes behind it are its own stack. Reading
+		 * @out_align and @token from there turns a stale saved
+		 * register into a token and sends the request through
+		 * tiler_alloc_block_area_aligned(), which refuses the garbage
+		 * alignment with -EINVAL. Only in-kernel callers choose an
+		 * alignment or a token.
+		 */
+		memset(&data, 0, sizeof(data));
+		if (copy_from_user(&data, (void __user *)arg,
+				   OMAP_ION_TILER_ALLOC_UABI_SIZE))
 			return -EFAULT;
+		data.out_align = PAGE_SIZE;
+		data.token = 0;
 		ret = omap_ion_tiler_alloc(client, &data);
 		if (ret)
 			return ret;
 		data.handle = (struct ion_handle *)data.handle->id;
 		if (copy_to_user((void __user *)arg, &data,
-				 sizeof(data)))
+				 OMAP_ION_TILER_ALLOC_UABI_SIZE))
 			return -EFAULT;
 		break;
 	}
