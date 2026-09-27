@@ -1243,8 +1243,7 @@ dhd_op_if(dhd_if_t *ifp)
 			ret = -ENOMEM;
 		}
 		if (ret == 0) {
-			strncpy(ifp->net->name, ifp->name, IFNAMSIZ);
-			ifp->net->name[IFNAMSIZ - 1] = '\0';
+			strlcpy(ifp->net->name, ifp->name, IFNAMSIZ);
 			memcpy(netdev_priv(ifp->net), &dhd, sizeof(dhd));
 #ifdef WL_CFG80211
 			if (dhd->dhd_state & DHD_ATTACH_STATE_CFG80211)
@@ -2899,7 +2898,7 @@ dhd_open(struct net_device *net)
 		if (firmware_path[strlen(firmware_path)-1] == '\n')
 			firmware_path[strlen(firmware_path)-1] = '\0';
 		bzero(fw_path, MOD_PARAM_PATHLEN);
-		strncpy(fw_path, firmware_path, sizeof(fw_path)-1);
+		strlcpy(fw_path, firmware_path, sizeof(fw_path));
 		firmware_path[0] = '\0';
 	}
 
@@ -3158,11 +3157,11 @@ dhd_attach(osl_t *osh, struct dhd_bus *bus, uint bus_hdrlen)
 	/* updates firmware nvram path if it was provided as module parameters */
 	if (strlen(firmware_path) != 0) {
 		bzero(fw_path, MOD_PARAM_PATHLEN);
-		strncpy(fw_path, firmware_path, sizeof(fw_path) - 1);
+		strlcpy(fw_path, firmware_path, sizeof(fw_path));
 	}
 	if (strlen(nvram_path) != 0) {
 		bzero(nv_path, MOD_PARAM_PATHLEN);
-		strncpy(nv_path, nvram_path, sizeof(nv_path) -1);
+		strlcpy(nv_path, nvram_path, sizeof(nv_path));
 	}
 
 	/* Allocate etherdev, including space for private structure */

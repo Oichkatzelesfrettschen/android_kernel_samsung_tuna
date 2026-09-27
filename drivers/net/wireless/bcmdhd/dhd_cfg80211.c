@@ -576,7 +576,7 @@ int wl_cfg80211_set_btcoex_dhcp(struct net_device *dev, char *command)
 #endif
 
 	/* Figure out powermode 1 or o command */
-	strncpy((char *)&powermode_val, command + strlen("BTCOEXMODE") +1, 1);
+	powermode_val = command[sizeof("BTCOEXMODE")];
 
 	if (strnicmp((char *)&powermode_val, "1", strlen("1")) == 0) {
 		WL_TRACE_HW4(("DHCP session starts\n"));
