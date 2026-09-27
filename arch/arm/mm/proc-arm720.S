@@ -216,7 +216,7 @@ cpu_arm720_name:
  * See <asm/procinfo.h> for a definition of this structure.
  */
 	
-		.section ".proc.info.init", #alloc, #execinstr
+		.section ".proc.info.init", "a"
 
 		.type	__arm710_proc_info, #object
 __arm710_proc_info:

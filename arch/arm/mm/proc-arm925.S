@@ -527,7 +527,7 @@ cpu_arm925_name:
 
 	.align
 
-	.section ".proc.info.init", #alloc, #execinstr
+	.section ".proc.info.init", "a"
 
 	.type	__arm925_proc_info,#object
 __arm925_proc_info:

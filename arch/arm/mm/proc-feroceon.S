@@ -593,7 +593,7 @@ cpu_88fr131_name:
 
 	.align
 
-	.section ".proc.info.init", #alloc, #execinstr
+	.section ".proc.info.init", "a"
 
 #ifdef CONFIG_CPU_FEROCEON_OLD_ID
 	.type	__feroceon_old_id_proc_info,#object

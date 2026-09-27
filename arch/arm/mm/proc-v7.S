@@ -477,7 +477,7 @@ cpu_elf_name:
 	.size	cpu_elf_name, . - cpu_elf_name
 	.align
 
-	.section ".proc.info.init", #alloc, #execinstr
+	.section ".proc.info.init", "a"
 
 	.type   __v7_ca9mp_proc_info, #object
 __v7_ca9mp_proc_info:

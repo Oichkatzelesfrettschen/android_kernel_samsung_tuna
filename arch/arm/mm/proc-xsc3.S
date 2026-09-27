@@ -543,7 +543,7 @@ cpu_xsc3_name:
 
 	.align
 
-	.section ".proc.info.init", #alloc, #execinstr
+	.section ".proc.info.init", "a"
 
 	.type	__xsc3_proc_info,#object
 __xsc3_proc_info:

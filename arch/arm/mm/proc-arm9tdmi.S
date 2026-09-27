@@ -99,7 +99,7 @@ cpu_p2001_name:
 
 		.align
 
-		.section ".proc.info.init", #alloc, #execinstr
+		.section ".proc.info.init", "a"
 
 		.type	__arm9tdmi_proc_info, #object
 __arm9tdmi_proc_info:
