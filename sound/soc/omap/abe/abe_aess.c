@@ -134,6 +134,7 @@ int omap_abe_write_event_generator(struct omap_abe *abe, u32 e)
 		break;
 	default:
 		omap_abe_dbg_error(abe, OMAP_ABE_ERR_API, ABE_BLOCK_COPY_ERR);
+		return -EINVAL;
 	}
 	omap_abe_reg_writel(abe, EVENT_GENERATOR_COUNTER, counter);
 	omap_abe_reg_writel(abe, EVENT_SOURCE_SELECTION, selection);

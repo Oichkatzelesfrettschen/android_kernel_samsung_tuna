@@ -1162,7 +1162,7 @@ void abe_init_io_tasks(u32 id, abe_data_format_t *format,
 				smem1 = IO_VX_DL_ASRC_labelID;
 
 				/* ASRC set only for McBSP */
-				if ((prot->protocol_switch == SERIAL_PORT_PROT)) {
+				if (prot->protocol_switch == SERIAL_PORT_PROT) {
 					if ((abe_port[OMAP_ABE_VX_DL_PORT].status ==
 						OMAP_ABE_PORT_ACTIVITY_IDLE) &&
 					    (abe_port[OMAP_ABE_VX_UL_PORT].status ==
@@ -1197,7 +1197,7 @@ void abe_init_io_tasks(u32 id, abe_data_format_t *format,
 				smem1 = IO_VX_DL_ASRC_labelID;
 
 				/* ASRC set only for McBSP */
-				if ((prot->protocol_switch == SERIAL_PORT_PROT)) {
+				if (prot->protocol_switch == SERIAL_PORT_PROT) {
 					if ((abe_port[OMAP_ABE_VX_DL_PORT].status ==
 						OMAP_ABE_PORT_ACTIVITY_IDLE) &&
 					    (abe_port[OMAP_ABE_VX_UL_PORT].status ==
@@ -1243,7 +1243,7 @@ void abe_init_io_tasks(u32 id, abe_data_format_t *format,
 				smem1 = Voice_8k_UL_labelID;
 
 				/* ASRC set only for McBSP */
-				if ((prot->protocol_switch == SERIAL_PORT_PROT)) {
+				if (prot->protocol_switch == SERIAL_PORT_PROT) {
 					if ((abe_port[OMAP_ABE_VX_DL_PORT].status ==
 						OMAP_ABE_PORT_ACTIVITY_IDLE) &&
 					    (abe_port[OMAP_ABE_VX_UL_PORT].status ==
@@ -1279,7 +1279,7 @@ void abe_init_io_tasks(u32 id, abe_data_format_t *format,
 				smem1 = Voice_16k_UL_labelID;
 
 				/* ASRC set only for McBSP */
-				if ((prot->protocol_switch == SERIAL_PORT_PROT)) {
+				if (prot->protocol_switch == SERIAL_PORT_PROT) {
 					if ((abe_port[OMAP_ABE_VX_DL_PORT].status ==
 						OMAP_ABE_PORT_ACTIVITY_IDLE) &&
 					    (abe_port[OMAP_ABE_VX_UL_PORT].status ==

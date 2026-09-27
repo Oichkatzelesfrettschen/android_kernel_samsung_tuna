@@ -446,7 +446,7 @@ void hdcp_3des_encrypt_key(struct hdcp_encrypt_control *enc_ctrl,
  * Function: hdcp_lib_disable
  *-----------------------------------------------------------------------------
  */
-int hdcp_lib_disable()
+int hdcp_lib_disable(void)
 {
 	DBG("hdcp_lib_disable() %u", jiffies_to_msecs(jiffies));
 
