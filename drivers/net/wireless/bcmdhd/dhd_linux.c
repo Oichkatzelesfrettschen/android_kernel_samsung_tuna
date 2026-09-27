@@ -5478,7 +5478,6 @@ int net_os_rxfilter_add_remove(struct net_device *dev, int add_remove, int num)
 		dhd_pktfilter_offload_set(&dhd->pub, dhd->pub.pktfilter[num]);
 	} else { /* Delete filter */
 		dhd->pub.pktfilter[num] = NULL;
-		/* dhd_pktfilter_offload_delete(&dhd->pub, filter_id); */
 	}
 	return ret;
 }
