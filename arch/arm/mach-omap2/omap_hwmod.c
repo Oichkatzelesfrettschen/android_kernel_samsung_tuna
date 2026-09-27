@@ -1022,7 +1022,7 @@ static int _wait_target_ready(struct omap_hwmod *oh)
  * Return the bit position of the reset line that match the
  * input name. Return -ENOENT if not found.
  */
-static u8 _lookup_hardreset(struct omap_hwmod *oh, const char *name,
+static int _lookup_hardreset(struct omap_hwmod *oh, const char *name,
 			    struct omap_hwmod_rst_info *ohri)
 {
 	int i;
@@ -1056,13 +1056,13 @@ static u8 _lookup_hardreset(struct omap_hwmod *oh, const char *name,
 static int _assert_hardreset(struct omap_hwmod *oh, const char *name)
 {
 	struct omap_hwmod_rst_info ohri;
-	u8 ret;
+	int ret;
 
 	if (!oh)
 		return -EINVAL;
 
 	ret = _lookup_hardreset(oh, name, &ohri);
-	if (IS_ERR_VALUE(ret))
+	if (ret)
 		return ret;
 
 	if (cpu_is_omap24xx() || cpu_is_omap34xx())
@@ -1094,7 +1094,7 @@ static int _deassert_hardreset(struct omap_hwmod *oh, const char *name)
 		return -EINVAL;
 
 	ret = _lookup_hardreset(oh, name, &ohri);
-	if (IS_ERR_VALUE(ret))
+	if (ret)
 		return ret;
 
 	if (cpu_is_omap24xx() || cpu_is_omap34xx()) {
@@ -1128,13 +1128,13 @@ static int _deassert_hardreset(struct omap_hwmod *oh, const char *name)
 static int _read_hardreset(struct omap_hwmod *oh, const char *name)
 {
 	struct omap_hwmod_rst_info ohri;
-	u8 ret;
+	int ret;
 
 	if (!oh)
 		return -EINVAL;
 
 	ret = _lookup_hardreset(oh, name, &ohri);
-	if (IS_ERR_VALUE(ret))
+	if (ret)
 		return ret;
 
 	if (cpu_is_omap24xx() || cpu_is_omap34xx()) {
