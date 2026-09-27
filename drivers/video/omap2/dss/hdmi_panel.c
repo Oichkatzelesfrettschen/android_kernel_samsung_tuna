@@ -351,6 +351,7 @@ static void hdmi_hotplug_detect_worker(struct work_struct *work)
 	}
 done:
 	mutex_unlock(&hdmi.hdmi_lock);
+	omap_dss_put_device(dssdev);
 }
 
 int hdmi_panel_hpd_handler(int hpd)

@@ -299,11 +299,11 @@ static int omap_dss_remove(struct platform_device *pdev)
 
 	dss_uninitialize_debugfs();
 
-	venc_uninit_platform_driver();
-	dispc_uninit_platform_driver();
-	rfbi_uninit_platform_driver();
-	dsi_uninit_platform_driver();
 	hdmi_uninit_platform_driver();
+	dsi_uninit_platform_driver();
+	venc_uninit_platform_driver();
+	rfbi_uninit_platform_driver();
+	dispc_uninit_platform_driver();
 	dss_uninit_platform_driver();
 
 	if (dss_has_feature(FEAT_OVL_WB))
@@ -652,4 +652,3 @@ device_initcall(omap_dss_init2);
 MODULE_AUTHOR("Tomi Valkeinen <tomi.valkeinen@nokia.com>");
 MODULE_DESCRIPTION("OMAP2/3 Display Subsystem");
 MODULE_LICENSE("GPL v2");
-
