@@ -35,6 +35,7 @@
 #include <linux/rpmsg.h>
 #include <linux/rpmsg_omx.h>
 #include <linux/completion.h>
+#include <linux/delay.h>
 #ifndef CONFIG_MACH_TUNA
 #include <linux/remoteproc.h>
 #endif
@@ -770,6 +771,20 @@ static int rpmsg_omx_release(struct inode *inode, struct file *filp)
 			dev_err(omxserv->dev, "rpmsg_send failed: %d\n", ret);
 			return ret;
 		}
+
+		/*
+		 * enum omx_msg_types has no disconnect response: Ducati never
+		 * replies to OMX_DISCONNECT (include/linux/rpmsg_omx.h's own
+		 * "do we need a disconnect response?" TODO), so there is
+		 * nothing to wait on here. rpmsg_send_offchannel() above only
+		 * enqueues the message on the virtio ring; without a grace
+		 * period, rpmsg_destroy_ept() below removes this address from
+		 * the endpoint lookup before Ducati's OMX component dequeues
+		 * OMX_DISCONNECT and releases the rpres grants (IVAHD,
+		 * IVASEQ0/1) tied to this connection, racing whatever Ducati
+		 * does with the now-missing source endpoint.
+		 */
+		msleep(50);
 	}
 
 	rpmsg_destroy_ept(omx->ept);
