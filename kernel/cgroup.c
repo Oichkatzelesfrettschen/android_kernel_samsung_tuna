@@ -63,6 +63,8 @@
 
 static DEFINE_MUTEX(cgroup_mutex);
 
+static struct file_system_type compat_cgroup2_fs_type;
+
 /*
  * Generate an array of cgroup subsystem pointers. At boot time, this is
  * populated up to CGROUP_BUILTIN_SUBSYS_COUNT, and modular subsystems are
