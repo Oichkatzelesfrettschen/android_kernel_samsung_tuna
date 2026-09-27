@@ -451,15 +451,6 @@ static struct area_info *area_new_m(enum tiler_fmt fmt, u16 width, u16 height,
 	return ai;
 }
 
-/* (must have mutex) free an area */
-static inline void _m_area_free(struct area_info *ai)
-{
-	if (ai) {
-		list_del(&ai->by_gid);
-		kfree(ai);
-	}
-}
-
 static s32 __analize_area(enum tiler_fmt fmt, u32 width, u32 height,
 			  u16 *x_area, u16 *y_area, u16 *band, u16 *align,
 			u16 *offs, u16 *remainder)
@@ -949,12 +940,6 @@ static inline bool _m_dec_ref(struct mem_info *mi)
 	return 0;
 }
 
-/* (must have mutex) */
-static inline void _m_inc_ref(struct mem_info *mi)
-{
-	mi->refs++;
-}
-
 /* (must have mutex) returns true if block was freed */
 static inline bool _m_try_free(struct mem_info *mi)
 {
@@ -1372,7 +1357,8 @@ struct tiler_pa_info *user_block_to_pa(u32 usr_addr, u32 num_pg)
 
 	struct tiler_pa_info *pa = NULL;
 	struct page **pages = NULL;
-	u32 *mem = NULL, write, i;
+	u32 *mem = NULL, i;
+	bool write_access;
 	int usr_count;
 
 	pa = kzalloc(sizeof(*pa), GFP_KERNEL);
@@ -1412,10 +1398,10 @@ struct tiler_pa_info *user_block_to_pa(u32 usr_addr, u32 num_pg)
 		return ERR_PTR(-EFAULT);
 	}
 
-	if (vma->vm_flags & (VM_WRITE | VM_MAYWRITE))
-		write = 1;
+	write_access = !!(vma->vm_flags & (VM_WRITE | VM_MAYWRITE));
 
-	usr_count = get_user_pages(curr_task, mm, usr_addr, num_pg, write, 1,
+	usr_count = get_user_pages(curr_task, mm, usr_addr, num_pg,
+					write_access, 1,
 					pages, NULL);
 
 	if (usr_count > 0) {

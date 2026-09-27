@@ -146,7 +146,7 @@ static inline void serial_omap_port_enable(struct uart_omap_port *up)
 }
 
 /* TBD: Should be removed once we irq-chaining mechanism in place */
-u32 omap_uart_resume_idle()
+u32 omap_uart_resume_idle(void)
 {
 	int i;
 	u32 ret = 0;
