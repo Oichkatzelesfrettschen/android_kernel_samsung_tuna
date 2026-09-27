@@ -196,6 +196,13 @@ struct semaphore_waiter {
 	int up;
 };
 
+/* The waiter stays linked while another task may wake and unlink it. */
+static noinline void semaphore_add_waiter(struct semaphore *sem,
+					 struct semaphore_waiter *waiter)
+{
+	list_add_tail(&waiter->list, &sem->wait_list);
+}
+
 /*
  * Because this function is inlined, the 'state' parameter will be
  * constant, and thus optimised away by the compiler.  Likewise the
@@ -207,7 +214,7 @@ static inline int __sched __down_common(struct semaphore *sem, long state,
 	struct task_struct *task = current;
 	struct semaphore_waiter waiter;
 
-	list_add_tail(&waiter.list, &sem->wait_list);
+	semaphore_add_waiter(sem, &waiter);
 	waiter.task = task;
 	waiter.up = 0;
 

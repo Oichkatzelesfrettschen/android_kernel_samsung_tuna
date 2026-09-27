@@ -494,12 +494,6 @@ static struct clk dpll_core_m6x2_ck = {
 	.set_rate	= &omap2_clksel_set_rate,
 };
 
-static const struct clksel dbgclk_mux_sel[] = {
-	{ .parent = &sys_clkin_ck, .rates = div_1_0_rates },
-	{ .parent = &dpll_core_m6x2_ck, .rates = div_1_1_rates },
-	{ .parent = NULL },
-};
-
 static struct clk dbgclk_mux_ck = {
 	.name		= "dbgclk_mux_ck",
 	.parent		= &sys_clkin_ck,
@@ -1465,13 +1459,6 @@ static struct clk per_abe_24m_fclk = {
 	.fixed_div	= 4,
 	.recalc		= &omap_fixed_divisor_recalc,
 	.speculate	= &omap2_clksel_speculate,
-};
-
-static const struct clksel pmd_stm_clock_mux_sel[] = {
-	{ .parent = &sys_clkin_ck, .rates = div_1_0_rates },
-	{ .parent = &dpll_core_m6x2_ck, .rates = div_1_1_rates },
-	{ .parent = &tie_low_clock_ck, .rates = div_1_2_rates },
-	{ .parent = NULL },
 };
 
 static struct clk pmd_stm_clock_mux_ck = {
