@@ -859,7 +859,7 @@ int ping_recvmsg(struct kiocb *iocb, struct sock *sk, struct msghdr *msg,
 	struct sockaddr_in *sin;
 	struct sockaddr_in6 *sin6;
 	struct sk_buff *skb;
-	int copied, err;
+	int copied, err = -EOPNOTSUPP;
 
 	pr_debug("ping_recvmsg(sk=%p,sk->num=%u)\n", isk, isk->inet_num);
 

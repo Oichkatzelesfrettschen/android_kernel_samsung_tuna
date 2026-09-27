@@ -294,8 +294,10 @@ static void ip6_dst_ifdown(struct dst_entry *dst, struct net_device *dev,
 
 static __inline__ int rt6_check_expired(const struct rt6_info *rt)
 {
+	unsigned long expires = rt->dst.expires;
+
 	return (rt->rt6i_flags & RTF_EXPIRES) &&
-		time_after(jiffies, rt->rt6i_expires);
+		time_after(jiffies, expires);
 }
 
 static inline int rt6_need_strict(const struct in6_addr *daddr)

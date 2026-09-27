@@ -1462,8 +1462,6 @@ static void reg_process_hint(struct regulatory_request *reg_request)
 	struct wiphy *wiphy = NULL;
 	enum nl80211_reg_initiator initiator = reg_request->initiator;
 
-	BUG_ON(!reg_request->alpha2);
-
 	if (wiphy_idx_valid(reg_request->wiphy_idx))
 		wiphy = wiphy_idx_to_wiphy(reg_request->wiphy_idx);
 
