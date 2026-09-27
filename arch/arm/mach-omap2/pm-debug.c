@@ -60,22 +60,27 @@ static u32 saved_reg_addr;
 static u32 saved_reg_buff[2][PM_DEBUG_MAX_SAVED_REGS];
 #endif
 
-#define DUMP_PRM_MOD_REG(mod, reg)    \
+#define DUMP_PRM_MOD_REG(mod, reg) do { \
 	regs[reg_count].name = #mod "." #reg; \
-	regs[reg_count++].val = omap2_prm_read_mod_reg(mod, reg)
-#define DUMP_CM_MOD_REG(mod, reg)     \
+	regs[reg_count++].val = omap2_prm_read_mod_reg(mod, reg); \
+} while (0)
+#define DUMP_CM_MOD_REG(mod, reg) do { \
 	regs[reg_count].name = #mod "." #reg; \
-	regs[reg_count++].val = omap2_cm_read_mod_reg(mod, reg)
-#define DUMP_PRM_REG(reg) \
+	regs[reg_count++].val = omap2_cm_read_mod_reg(mod, reg); \
+} while (0)
+#define DUMP_PRM_REG(reg) do { \
 	regs[reg_count].name = #reg; \
-	regs[reg_count++].val = __raw_readl(reg)
-#define DUMP_CM_REG(reg) \
+	regs[reg_count++].val = __raw_readl(reg); \
+} while (0)
+#define DUMP_CM_REG(reg) do { \
 	regs[reg_count].name = #reg; \
-	regs[reg_count++].val = __raw_readl(reg)
-#define DUMP_INTC_REG(reg, off) \
+	regs[reg_count++].val = __raw_readl(reg); \
+} while (0)
+#define DUMP_INTC_REG(reg, off) do { \
 	regs[reg_count].name = #reg; \
 	regs[reg_count++].val = \
-			 __raw_readl(OMAP2_L4_IO_ADDRESS(0x480fe000 + (off)))
+			 __raw_readl(OMAP2_L4_IO_ADDRESS(0x480fe000 + (off))); \
+} while (0)
 
 void omap2_pm_dump(int mode, int resume, unsigned int us)
 {
