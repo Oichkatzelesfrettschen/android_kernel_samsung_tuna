@@ -760,8 +760,8 @@ dhdsdio_sr_init(dhd_bus_t *bus)
 	val = bcmsdh_cfg_read(bus->sdh, SDIO_FUNC_1, SBSDIO_FUNC1_WAKEUPCTRL, NULL);
 	val |= 1 << SBSDIO_FUNC1_WCTRL_HTWAIT_SHIFT;
 	bcmsdh_cfg_write(bus->sdh, SDIO_FUNC_1, SBSDIO_FUNC1_WAKEUPCTRL,
-		1 << SBSDIO_FUNC1_WCTRL_HTWAIT_SHIFT, &err);
-	val = bcmsdh_cfg_read(bus->sdh, SDIO_FUNC_1, SBSDIO_FUNC1_WAKEUPCTRL, NULL);
+		val, &err);
+	bcmsdh_cfg_read(bus->sdh, SDIO_FUNC_1, SBSDIO_FUNC1_WAKEUPCTRL, NULL);
 
 	/* Add CMD14 Support */
 	dhdsdio_devcap_set(bus,

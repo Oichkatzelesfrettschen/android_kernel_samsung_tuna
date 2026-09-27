@@ -592,7 +592,7 @@ ai_wrap_reg(si_t *sih, uint32 offset, uint32 mask, uint32 val)
 		uint32 w = R_REG(sii->osh, map+(offset/4));
 		w &= ~mask;
 		w |= val;
-		W_REG(sii->osh, map+(offset/4), val);
+		W_REG(sii->osh, map+(offset/4), w);
 	}
 
 	return (R_REG(sii->osh, map+(offset/4)));
