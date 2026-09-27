@@ -204,7 +204,8 @@ static void debug_prompt(struct fiq_debugger_state *state)
 
 static void dump_kernel_log(struct fiq_debugger_state *state)
 {
-	char buf[1024];
+	/* Bound the stack frame while copying arbitrary log byte ranges. */
+	char buf[256];
 	int idx = 0;
 	int ret;
 	int saved_oip;
@@ -216,7 +217,7 @@ static void dump_kernel_log(struct fiq_debugger_state *state)
 	saved_oip = oops_in_progress;
 	oops_in_progress = 1;
 	for (;;) {
-		ret = log_buf_copy(buf, idx, 1023);
+		ret = log_buf_copy(buf, idx, sizeof(buf) - 1);
 		if (ret <= 0)
 			break;
 		buf[ret] = 0;
@@ -319,7 +320,12 @@ struct mode_regs {
 	unsigned long spsr_fiq;
 };
 
+/* Clang lacks GCC's noclone attribute for naked assembly routines. */
+#ifdef __clang__
+void __attribute__((naked)) noinline notrace get_mode_regs(struct mode_regs *regs)
+#else
 void __naked get_mode_regs(struct mode_regs *regs)
+#endif
 {
 	asm volatile (
 	"mrs	r1, cpsr\n"

@@ -33,12 +33,14 @@ static u32 l2x0_cache_id;
 static unsigned int l2x0_sets;
 static unsigned int l2x0_ways;
 
+#ifdef CONFIG_PL310_ERRATA_727915
 static inline bool is_pl310_rev(int rev)
 {
 	return (l2x0_cache_id &
 		(L2X0_CACHE_ID_PART_MASK | L2X0_CACHE_ID_REV_MASK)) ==
 			(L2X0_CACHE_ID_PART_L310 | rev);
 }
+#endif
 
 static inline void cache_wait_way(void __iomem *reg, unsigned long mask)
 {

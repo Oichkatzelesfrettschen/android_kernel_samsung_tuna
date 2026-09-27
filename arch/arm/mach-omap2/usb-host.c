@@ -876,7 +876,7 @@ int omap4430_usbhs_update_sar(void)
 	return 0;
 }
 
-void usbhs_wakeup()
+void usbhs_wakeup(void)
 {
 	int workq = 0;
 
@@ -992,7 +992,7 @@ void __init usbhs_init(const struct usbhs_omap_board_data *pdata)
 
 #else
 
-void usbhs_wakeup()
+void usbhs_wakeup(void)
 {
 }
 
@@ -1001,5 +1001,4 @@ void __init usbhs_init(const struct usbhs_omap_board_data *pdata)
 }
 
 #endif
-
 

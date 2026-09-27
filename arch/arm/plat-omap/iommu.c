@@ -199,6 +199,7 @@ static void iotlb_load_cr(struct iommu *obj, struct cr_regs *cr)
 	iommu_write_reg(obj, 1, MMU_LD_TLB);
 }
 
+#if defined(CONFIG_OMAP_IOMMU_DEBUG_MODULE)
 /**
  * iotlb_dump_cr - Dump an iommu tlb entry into buf
  * @obj:	target iommu
@@ -212,6 +213,7 @@ static inline ssize_t iotlb_dump_cr(struct iommu *obj, struct cr_regs *cr,
 
 	return arch_iommu->dump_cr(obj, cr, buf);
 }
+#endif
 
 /* only used in iotlb iteration for-loop */
 static struct cr_regs __iotlb_read_cr(struct iommu *obj, int n)

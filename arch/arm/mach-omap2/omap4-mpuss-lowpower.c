@@ -139,16 +139,6 @@ static inline void set_cpu_next_pwrst(unsigned int cpu_id,
 }
 
 /*
- * Read CPU's previous power state
- */
-static inline unsigned int read_cpu_prev_pwrst(unsigned int cpu_id)
-{
-	struct omap4_cpu_pm_info *pm_info = &per_cpu(omap4_pm_info, cpu_id);
-
-	return pwrdm_read_prev_pwrst(pm_info->pwrdm);
-}
-
-/*
  * Clear the CPUx powerdomain's previous power state
  */
 static inline void clear_cpu_prev_pwrst(unsigned int cpu_id)
@@ -857,4 +847,3 @@ int __init omap4_mpuss_init(void)
 }
 
 #endif
-
