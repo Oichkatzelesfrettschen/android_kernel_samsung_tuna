@@ -295,18 +295,14 @@ static int __init omap_hsmmc_pdata_init(struct omap2_hsmmc_info *c,
 {
 	char *hc_name;
 
-	hc_name = kzalloc(sizeof(char) * (HSMMC_NAME_LEN + 1), GFP_KERNEL);
+	if (c->name)
+		hc_name = kstrndup(c->name, HSMMC_NAME_LEN, GFP_KERNEL);
+	else
+		hc_name = kasprintf(GFP_KERNEL, "mmc%islot1", c->mmc);
 	if (!hc_name) {
 		pr_err("Cannot allocate memory for controller slot name\n");
-		kfree(hc_name);
 		return -ENOMEM;
 	}
-
-	if (c->name)
-		strncpy(hc_name, c->name, HSMMC_NAME_LEN);
-	else
-		snprintf(hc_name, (HSMMC_NAME_LEN + 1), "mmc%islot%i",
-								c->mmc, 1);
 	mmc->slots[0].name = hc_name;
 	mmc->nr_slots = 1;
 	mmc->slots[0].caps = c->caps;
