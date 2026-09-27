@@ -412,8 +412,11 @@ rh_string(int id, struct usb_hcd const *hcd, u8 *data, unsigned len)
 		break;
 	case 3:
 		/* Manufacturer */
-		snprintf (buf, sizeof buf, "%s %s %s", init_utsname()->sysname,
-			init_utsname()->release, hcd->driver->description);
+		strlcpy(buf, init_utsname()->sysname, sizeof(buf));
+		strlcat(buf, " ", sizeof(buf));
+		strlcat(buf, init_utsname()->release, sizeof(buf));
+		strlcat(buf, " ", sizeof(buf));
+		strlcat(buf, hcd->driver->description, sizeof(buf));
 		s = buf;
 		break;
 	default:

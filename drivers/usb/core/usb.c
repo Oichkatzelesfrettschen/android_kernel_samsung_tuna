@@ -371,6 +371,30 @@ struct usb_device *usb_alloc_dev(struct usb_device *parent,
 	struct usb_device *dev;
 	struct usb_hcd *usb_hcd = container_of(bus, struct usb_hcd, self);
 	unsigned root_hub = 0;
+	char devpath[sizeof(dev->devpath)] = { 0 };
+
+	if (parent) {
+		char port_name[sizeof("4294967295")];
+		size_t port_len, parent_len = 0;
+
+		snprintf(port_name, sizeof(port_name), "%u", port1);
+		port_len = strlen(port_name);
+		if (parent->devpath[0] != '0') {
+			parent_len = strnlen(parent->devpath,
+					       sizeof(parent->devpath));
+			if (parent_len >= sizeof(parent->devpath) ||
+			    parent_len + 1 + port_len >= sizeof(devpath)) {
+				dev_warn(&parent->dev, "USB port path too long\n");
+				return NULL;
+			}
+			memcpy(devpath, parent->devpath, parent_len);
+			devpath[parent_len++] = '.';
+		} else if (port_len >= sizeof(devpath)) {
+			dev_warn(&parent->dev, "USB port path too long\n");
+			return NULL;
+		}
+		memcpy(devpath + parent_len, port_name, port_len + 1);
+	}
 
 	dev = kzalloc(sizeof(*dev), GFP_KERNEL);
 	if (!dev)
@@ -421,14 +445,11 @@ struct usb_device *usb_alloc_dev(struct usb_device *parent,
 		root_hub = 1;
 	} else {
 		/* match any labeling on the hubs; it's one-based */
+		memcpy(dev->devpath, devpath, sizeof(devpath));
 		if (parent->devpath[0] == '0') {
-			snprintf(dev->devpath, sizeof dev->devpath,
-				"%d", port1);
 			/* Root ports are not counted in route string */
 			dev->route = 0;
 		} else {
-			snprintf(dev->devpath, sizeof dev->devpath,
-				"%s.%d", parent->devpath, port1);
 			/* Route string assumes hubs have less than 16 ports */
 			if (port1 < 15)
 				dev->route = parent->route +
