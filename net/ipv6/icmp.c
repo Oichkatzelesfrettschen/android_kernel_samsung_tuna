@@ -296,6 +296,7 @@ static void mip6_addr_swap(struct sk_buff *skb)
 	struct ipv6hdr *iph = ipv6_hdr(skb);
 	struct inet6_skb_parm *opt = IP6CB(skb);
 	struct ipv6_destopt_hao *hao;
+	struct in6_addr home_addr;
 	struct in6_addr tmp;
 	int off;
 
@@ -304,9 +305,10 @@ static void mip6_addr_swap(struct sk_buff *skb)
 		if (likely(off >= 0)) {
 			hao = (struct ipv6_destopt_hao *)
 					(skb_network_header(skb) + off);
+			memcpy(&home_addr, &hao->addr, sizeof(home_addr));
 			ipv6_addr_copy(&tmp, &iph->saddr);
-			ipv6_addr_copy(&iph->saddr, &hao->addr);
-			ipv6_addr_copy(&hao->addr, &tmp);
+			ipv6_addr_copy(&iph->saddr, &home_addr);
+			memcpy(&hao->addr, &tmp, sizeof(tmp));
 		}
 	}
 }
@@ -1008,4 +1010,3 @@ struct ctl_table * __net_init ipv6_icmp_sysctl_init(struct net *net)
 	return table;
 }
 #endif
-

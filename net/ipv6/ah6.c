@@ -193,8 +193,10 @@ static void ipv6_rearrange_destopt(struct ipv6hdr *iph, struct ipv6_opt_hdr *des
 						printk(KERN_WARNING "destopt hao: invalid header length: %u\n", hao->length);
 					goto bad;
 				}
-				ipv6_addr_copy(&final_addr, &hao->addr);
-				ipv6_addr_copy(&hao->addr, &iph->saddr);
+				memcpy(&final_addr, &hao->addr,
+				       sizeof(final_addr));
+				memcpy(&hao->addr, &iph->saddr,
+				       sizeof(iph->saddr));
 				ipv6_addr_copy(&iph->saddr, &final_addr);
 			}
 			break;
