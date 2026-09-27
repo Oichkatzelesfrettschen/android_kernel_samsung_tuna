@@ -27,6 +27,7 @@
 #include <linux/utsname.h>
 
 #include <linux/usb/composite.h>
+#include <asm/unaligned.h>
 
 
 /*
@@ -612,20 +613,23 @@ int usb_remove_config(struct usb_composite_dev *cdev,
  * the host side.
  */
 
-static void collect_langs(struct usb_gadget_strings **sp, __le16 *buf)
+static void collect_langs(struct usb_gadget_strings **sp, u8 *buf)
 {
 	const struct usb_gadget_strings	*s;
 	u16				language;
-	__le16				*tmp;
+	unsigned int			index;
 
 	while (*sp) {
 		s = *sp;
-		language = cpu_to_le16(s->language);
-		for (tmp = buf; *tmp && tmp < &buf[126]; tmp++) {
-			if (*tmp == language)
+		language = s->language;
+		for (index = 0; index < 126 &&
+		     get_unaligned_le16(buf + index * sizeof(__le16)); index++) {
+			if (get_unaligned_le16(buf + index * sizeof(__le16)) ==
+			    language)
 				goto repeat;
 		}
-		*tmp++ = language;
+		put_unaligned_le16(language,
+				   buf + index * sizeof(__le16));
 repeat:
 		sp++;
 	}
@@ -675,17 +679,20 @@ static int get_string(struct usb_composite_dev *cdev,
 
 		sp = composite->strings;
 		if (sp)
-			collect_langs(sp, s->wData);
+			collect_langs(sp, (u8 *)s + offsetof(struct usb_string_descriptor,
+							 wData));
 
 		list_for_each_entry(c, &cdev->configs, list) {
 			sp = c->strings;
 			if (sp)
-				collect_langs(sp, s->wData);
+				collect_langs(sp, (u8 *)s + offsetof(struct usb_string_descriptor,
+							 wData));
 
 			list_for_each_entry(f, &c->functions, list) {
 				sp = f->strings;
 				if (sp)
-					collect_langs(sp, s->wData);
+					collect_langs(sp, (u8 *)s + offsetof(struct usb_string_descriptor,
+							 wData));
 			}
 		}
 
@@ -1177,13 +1184,18 @@ static int composite_bind(struct usb_gadget *gadget)
 	/* string overrides */
 	if (iManufacturer || !cdev->desc.iManufacturer) {
 		if (!iManufacturer && !composite->iManufacturer &&
-		    !*composite_manufacturer)
-			snprintf(composite_manufacturer,
-				 sizeof composite_manufacturer,
-				 "%s %s with %s",
-				 init_utsname()->sysname,
-				 init_utsname()->release,
-				 gadget->name);
+		    !*composite_manufacturer) {
+			strlcpy(composite_manufacturer, init_utsname()->sysname,
+				sizeof(composite_manufacturer));
+			strlcat(composite_manufacturer, " ",
+				sizeof(composite_manufacturer));
+			strlcat(composite_manufacturer, init_utsname()->release,
+				sizeof(composite_manufacturer));
+			strlcat(composite_manufacturer, " with ",
+				sizeof(composite_manufacturer));
+			strlcat(composite_manufacturer, gadget->name,
+				sizeof(composite_manufacturer));
+		}
 
 		cdev->manufacturer_override =
 			override_id(cdev, &cdev->desc.iManufacturer);
@@ -1372,4 +1384,3 @@ void usb_composite_setup_continue(struct usb_composite_dev *cdev)
 
 	spin_unlock_irqrestore(&cdev->lock, flags);
 }
-
