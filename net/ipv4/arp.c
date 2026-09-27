@@ -161,6 +161,7 @@ static const struct neigh_ops arp_direct_ops = {
 	.queue_xmit =		dev_queue_xmit,
 };
 
+#if defined(CONFIG_AX25) || defined(CONFIG_AX25_MODULE)
 static const struct neigh_ops arp_broken_ops = {
 	.family =		AF_INET,
 	.solicit =		arp_solicit,
@@ -170,6 +171,7 @@ static const struct neigh_ops arp_broken_ops = {
 	.hh_output =		dev_queue_xmit,
 	.queue_xmit =		dev_queue_xmit,
 };
+#endif
 
 struct neigh_table arp_tbl = {
 	.family		= AF_INET,
