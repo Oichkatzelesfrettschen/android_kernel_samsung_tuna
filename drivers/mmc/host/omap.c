@@ -690,6 +690,7 @@ mmc_omap_xfer_data(struct mmc_omap_host *host, int write)
 	}
 }
 
+#ifdef CONFIG_MMC_DEBUG
 static inline void mmc_omap_report_irq(u16 status)
 {
 	static const char *mmc_omap_status_bits[] = {
@@ -706,6 +707,7 @@ static inline void mmc_omap_report_irq(u16 status)
 			c++;
 		}
 }
+#endif
 
 static irqreturn_t mmc_omap_irq(int irq, void *dev_id)
 {

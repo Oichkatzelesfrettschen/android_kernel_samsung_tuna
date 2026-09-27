@@ -194,11 +194,6 @@ static inline void usbhs_writeb(void __iomem *base, u32 reg, u8 val)
 	__raw_writeb(val, base + reg);
 }
 
-static inline u8 usbhs_readb(void __iomem *base, u8 reg)
-{
-	return __raw_readb(base + reg);
-}
-
 /*-------------------------------------------------------------------------*/
 
 static struct platform_device *omap_usbhs_alloc_child(const char *name,

@@ -341,6 +341,8 @@ static inline map_word map_word_load(struct map_info *map, const void *ptr)
 #endif
 	else if (map_bankwidth_is_large(map))
 		memcpy(r.x, ptr, map->bankwidth);
+	else
+		BUG();
 
 	return r;
 }
