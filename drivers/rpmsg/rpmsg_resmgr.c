@@ -60,7 +60,7 @@ static char *clk_src_name[] = {
 	"dpll_per_m3x2_ck",
 };
 
-static const char const *rnames[] = {
+static const char * const rnames[] = {
 	[RPRM_GPTIMER]		= "GP Timer",
 	[RPRM_L3BUS]		= "L3 bus",
 	[RPRM_IVAHD]		= "IVA HD",
@@ -986,6 +986,7 @@ static void rprm_cb(struct rpmsg_channel *rpdev, void *data, int len,
 	char ack_msg[MAX_MSG];
 	struct rprm_ack *ack = (void *)ack_msg;
 	int r_sz = 0;
+	int resource_id;
 
 	if (len < sizeof(*req)) {
 		dev_err(dev, "Bad message\n");
@@ -1010,8 +1011,11 @@ static void rprm_cb(struct rpmsg_channel *rpdev, void *data, int len,
 			ret = -EINVAL;
 			break;
 		}
-		ret = rprm_resource_alloc(rprm, src, &req->res_id,
+		resource_id = req->res_id;
+		ret = rprm_resource_alloc(rprm, src, &resource_id,
 					req->res_type, req->data);
+		if (!ret)
+			req->res_id = resource_id;
 		if (ret)
 			dev_err(dev, "resource allocation failed! ret %d\n",
 				ret);

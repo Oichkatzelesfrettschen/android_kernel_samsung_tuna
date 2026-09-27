@@ -1212,7 +1212,7 @@ _dhd_wlfc_borrow_credit(athost_wl_status_info_t* ctx, uint8 available_credit_map
 
 	/* Borrow from lowest priority available AC (including BC/MC credits) */
 	for (lender_ac = 0; lender_ac <= AC_COUNT; lender_ac++) {
-		if ((available_credit_map && (1 << lender_ac)) &&
+		if ((available_credit_map & (1 << lender_ac)) &&
 		   (ctx->FIFO_credit[lender_ac] > 0)) {
 			ctx->credits_borrowed[borrower_ac][lender_ac]++;
 			ctx->FIFO_credit[lender_ac]--;

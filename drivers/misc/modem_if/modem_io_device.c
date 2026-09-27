@@ -56,7 +56,7 @@ struct rfs_hdr {
 	u8 id;
 } __attribute__ ((packed));
 
-static const char const *modem_state_name[] = {
+static const char * const modem_state_name[] = {
 	[STATE_OFFLINE]		= "OFFLINE",
 	[STATE_CRASH_EXIT]	= "CRASH_EXIT",
 	[STATE_BOOTING]		= "BOOTING",
@@ -921,4 +921,3 @@ int init_io_device(struct io_device *iod)
 				iod->name, iod->io_typ, ret);
 	return ret;
 }
-
