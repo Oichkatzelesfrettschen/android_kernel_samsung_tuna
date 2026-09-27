@@ -223,7 +223,7 @@ alloc_new:
 static void __set_data_blkaddr(struct dnode_of_data *dn, block_t new_addr)
 {
 	struct f2fs_node *rn;
-	__le32 *addr_array;
+	u8 *addr_array;
 	struct page *node_page = dn->node_page;
 	unsigned int ofs_in_node = dn->ofs_in_node;
 
@@ -233,7 +233,7 @@ static void __set_data_blkaddr(struct dnode_of_data *dn, block_t new_addr)
 
 	/* Get physical address of data block */
 	addr_array = blkaddr_in_node(rn);
-	addr_array[ofs_in_node] = cpu_to_le32(new_addr);
+	put_unaligned_le32(new_addr, addr_array + ofs_in_node * sizeof(__le32));
 	set_page_dirty(node_page);
 }
 

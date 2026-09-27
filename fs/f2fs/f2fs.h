@@ -19,6 +19,7 @@
 #include <linux/magic.h>
 #include <linux/kobject.h>
 #include <linux/sched.h>
+#include <asm/unaligned.h>
 
 #ifdef CONFIG_F2FS_CHECK_FS
 #define f2fs_bug_on(condition)	BUG_ON(condition)
@@ -891,19 +892,26 @@ static inline bool IS_INODE(struct page *page)
 	return RAW_IS_INODE(p);
 }
 
-static inline __le32 *blkaddr_in_node(struct f2fs_node *node)
+static inline u8 *blkaddr_in_node(struct f2fs_node *node)
 {
-	return RAW_IS_INODE(node) ? node->i.i_addr : node->dn.addr;
+	BUILD_BUG_ON(offsetof(struct f2fs_inode, i_addr) != 360);
+	BUILD_BUG_ON(offsetof(struct direct_node, addr) != 0);
+	BUILD_BUG_ON(sizeof(struct f2fs_inode) != 4072);
+	BUILD_BUG_ON(sizeof(struct direct_node) != 4072);
+	BUILD_BUG_ON(sizeof(struct f2fs_node) != 4096);
+	return (u8 *)node + (RAW_IS_INODE(node) ?
+				 offsetof(struct f2fs_inode, i_addr) :
+				 offsetof(struct direct_node, addr));
 }
 
 static inline block_t datablock_addr(struct page *node_page,
 		unsigned int offset)
 {
 	struct f2fs_node *raw_node;
-	__le32 *addr_array;
+	u8 *addr_array;
 	raw_node = F2FS_NODE(node_page);
 	addr_array = blkaddr_in_node(raw_node);
-	return le32_to_cpu(addr_array[offset]);
+	return get_unaligned_le32(addr_array + offset * sizeof(__le32));
 }
 
 static inline int f2fs_test_bit(unsigned int nr, char *addr)

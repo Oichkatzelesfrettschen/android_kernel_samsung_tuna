@@ -207,13 +207,13 @@ int truncate_data_blocks_range(struct dnode_of_data *dn, int count)
 	int nr_free = 0, ofs = dn->ofs_in_node;
 	struct f2fs_sb_info *sbi = F2FS_SB(dn->inode->i_sb);
 	struct f2fs_node *raw_node;
-	__le32 *addr;
+	u8 *addr;
 
 	raw_node = F2FS_NODE(dn->node_page);
-	addr = blkaddr_in_node(raw_node) + ofs;
+	addr = blkaddr_in_node(raw_node) + ofs * sizeof(__le32);
 
-	for (; count > 0; count--, addr++, dn->ofs_in_node++) {
-		block_t blkaddr = le32_to_cpu(*addr);
+	for (; count > 0; count--, addr += sizeof(__le32), dn->ofs_in_node++) {
+		block_t blkaddr = get_unaligned_le32(addr);
 		if (blkaddr == NULL_ADDR)
 			continue;
 
