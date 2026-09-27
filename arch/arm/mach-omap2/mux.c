@@ -1095,7 +1095,7 @@ static void __init omap_mux_init_list(struct omap_mux_partition *partition,
 		struct omap_mux *entry;
 
 #ifdef CONFIG_OMAP_MUX
-		if (!superset->muxnames || !superset->muxnames[0]) {
+		if (!superset->muxnames[0]) {
 			superset++;
 			continue;
 		}
@@ -1191,4 +1191,3 @@ int __init omap_mux_init(const char *name, u32 flags,
 
 	return 0;
 }
-
