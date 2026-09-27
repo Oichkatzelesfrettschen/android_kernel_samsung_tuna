@@ -196,11 +196,11 @@ int __init omap2_system_timer_init(u8 id)
 	struct omap_device *od;
 	struct omap_hwmod *oh;
 	struct powerdomain *pwrdm;
-	char system_timer_name[8]; /* 8 = sizeof("timerXX0") */
+	char system_timer_name[sizeof("timer255")];
 
 	system_timer_id = id;
 
-	sprintf(system_timer_name, "timer%d", id);
+	snprintf(system_timer_name, sizeof(system_timer_name), "timer%u", id);
 	ret = omap_hwmod_setup_one(system_timer_name);
 	if (ret) {
 		pr_err("%s: omap_hwmod_setup_one(%s) failed.\n",

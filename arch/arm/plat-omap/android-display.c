@@ -73,11 +73,10 @@ struct omap_android_display_data {
 static char default_display[16];
 static int __init get_default_display(char *str)
 {
-	strncpy(default_display, str, sizeof(default_display));
-	if (strlen(str) >= sizeof(default_display))
+	if (strlcpy(default_display, str, sizeof(default_display)) >=
+	    sizeof(default_display))
 		pr_warn("android_display: cannot set default display larger "
 			"than %d characters", sizeof(default_display) - 1);
-	default_display[sizeof(default_display) - 1] = '\0';
 	return 0;
 }
 early_param("omapdss.def_disp", get_default_display);
