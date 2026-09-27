@@ -92,6 +92,14 @@ struct rprm_elem {
 	void *handle;
 	u32 base;
 	struct rprm_constraints_data *constraints;
+	/*
+	 * RPRM_IVASEQ0/RPRM_IVASEQ1 hold a second, independent rpres_get()
+	 * on "rpres_iva" here (NULL for every other type): the sequencer
+	 * pseudo-hwmods have no functional clock of their own; their
+	 * RM_IVAHD_RSTCTRL hardreset deassert only completes while the
+	 * parent "iva" hwmod's clock is enabled.
+	 */
+	struct rpres *ivahd_dep;
 	char res[];
 };
 
@@ -634,26 +642,50 @@ static int rprm_rpres_request(struct rprm_elem *e, int type)
 {
 	const char *res_name = _get_rpres_name(type);
 	struct rpres *res;
+	int ret;
 
 	e->constraints = kzalloc(sizeof(*(e->constraints)), GFP_KERNEL);
 	if (!(e->constraints))
 		return -ENOMEM;
 
-	res = rpres_get(res_name);
+	if (type == RPRM_IVASEQ0 || type == RPRM_IVASEQ1) {
+		e->ivahd_dep = rpres_get("rpres_iva");
+		if (IS_ERR(e->ivahd_dep)) {
+			ret = PTR_ERR(e->ivahd_dep);
+			pr_err("%s: error requesting rpres_iva for %s\n",
+			       __func__, res_name);
+			e->ivahd_dep = NULL;
+			goto err_constraints;
+		}
+	}
 
+	res = rpres_get(res_name);
 	if (IS_ERR(res)) {
+		ret = PTR_ERR(res);
 		pr_err("%s: error requesting %s\n", __func__, res_name);
-		kfree(e->constraints);
-		return PTR_ERR(res);
+		goto err_ivahd_dep;
 	}
 	e->handle = res;
 
 	return 0;
+
+err_ivahd_dep:
+	if (e->ivahd_dep) {
+		rpres_put(e->ivahd_dep);
+		e->ivahd_dep = NULL;
+	}
+err_constraints:
+	kfree(e->constraints);
+	return ret;
 }
 
-static void rprm_rpres_release(struct rpres *res)
+static void rprm_rpres_release(struct rprm_elem *e)
 {
-	rpres_put(res);
+	rpres_put(e->handle);
+	if (e->ivahd_dep) {
+		rpres_put(e->ivahd_dep);
+		e->ivahd_dep = NULL;
+	}
 }
 
 static int rprm_rproc_request(struct rprm_elem *e, char *name)
@@ -699,7 +731,7 @@ static int _resource_free(struct rprm_elem *e)
 	case RPRM_ISS:
 	case RPRM_SL2IF:
 	case RPRM_FDIF:
-		rprm_rpres_release(e->handle);
+		rprm_rpres_release(e);
 		break;
 	case RPRM_IPU:
 	case RPRM_DSP:

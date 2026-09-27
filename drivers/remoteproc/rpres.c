@@ -34,9 +34,20 @@ static struct rpres *__find_by_name(const char *name)
 	return NULL;
 }
 
+/*
+ * obj->state is a use count, not a boolean: the IVAHD sequencer pseudo-
+ * hwmods (iva_seq0, iva_seq1) share the "iva" hwmod's functional clock, and
+ * omap_hwmod's _enable() only completes a sequencer's hardreset deassert
+ * (RM_IVAHD_RSTCTRL) while that clock is running. A second independent
+ * caller taking the same named rpres while the first still holds it (the
+ * IVAHD codec and one of its sequencers, granted and released across
+ * separate rpmsg_resmgr requests) must not tear down or re-run start()/
+ * stop() underneath the first caller; only the 0 -> 1 and 1 -> 0
+ * transitions touch the device.
+ */
 struct rpres *rpres_get(const char *name)
 {
-	int ret;
+	int ret = 0;
 	struct rpres *r;
 	struct rpres_platform_data *pdata;
 
@@ -47,16 +58,12 @@ struct rpres *rpres_get(const char *name)
 		return ERR_PTR(-ENOENT);
 
 	mutex_lock(&r->lock);
-	if (r->state == RPRES_ACTIVE) {
-		pr_err("%s:resource already active\n", __func__);
-		ret = -EINVAL;
-		goto out;
+	if (r->state == RPRES_INACTIVE) {
+		pdata = r->pdev->dev.platform_data;
+		ret = pdata->ops->start(r->pdev);
 	}
-	pdata = r->pdev->dev.platform_data;
-	ret = pdata->ops->start(r->pdev);
 	if (!ret)
-		r->state = RPRES_ACTIVE;
-out:
+		r->state++;
 	mutex_unlock(&r->lock);
 	if (ret)
 		return ERR_PTR(ret);
@@ -70,9 +77,8 @@ void rpres_put(struct rpres *obj)
 	mutex_lock(&obj->lock);
 	if (obj->state == RPRES_INACTIVE) {
 		pr_err("%s:resource already inactive\n", __func__);
-	} else {
+	} else if (--obj->state == RPRES_INACTIVE) {
 		pdata->ops->stop(obj->pdev);
-		obj->state = RPRES_INACTIVE;
 	}
 	mutex_unlock(&obj->lock);
 }
