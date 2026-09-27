@@ -293,21 +293,21 @@ static struct hpd_worker_data {
 } hpd_work;
 static struct workqueue_struct *my_workq;
 
+static int hdmi_panel_match_device(struct omap_dss_device *dssdev, void *arg)
+{
+	return sysfs_streq(dssdev->name, "hdmi");
+}
+
 static void hdmi_hotplug_detect_worker(struct work_struct *work)
 {
 	struct hpd_worker_data *d = container_of(work, typeof(*d), dwork.work);
 	struct omap_dss_device *dssdev = NULL;
 	int state = atomic_read(&d->state);
 
-	int match(struct omap_dss_device *dssdev, void *arg)
-	{
-		return sysfs_streq(dssdev->name , "hdmi");
-	}
-	dssdev = omap_dss_find_device(NULL, match);
-
-	pr_err("in hpd work %d, state=%d\n", state, dssdev->state);
+	dssdev = omap_dss_find_device(NULL, hdmi_panel_match_device);
 	if (dssdev == NULL)
 		return;
+	pr_err("in hpd work %d, state=%d\n", state, dssdev->state);
 
 	mutex_lock(&hdmi.hdmi_lock);
 	if (state == HPD_STATE_OFF) {
@@ -449,21 +449,37 @@ static struct omap_dss_driver hdmi_driver = {
 
 int hdmi_panel_init(void)
 {
+	int result;
+
 	mutex_init(&hdmi.hdmi_lock);
 	hdmi.hpd_switch.name = "hdmi";
-	switch_dev_register(&hdmi.hpd_switch);
+	result = switch_dev_register(&hdmi.hpd_switch);
+	if (result)
+		return result;
 
 	my_workq = create_singlethread_workqueue("hdmi_hotplug");
+	if (!my_workq) {
+		result = -ENOMEM;
+		goto err_workqueue;
+	}
 	INIT_DELAYED_WORK(&hpd_work.dwork, hdmi_hotplug_detect_worker);
-	omap_dss_register_driver(&hdmi_driver);
+	result = omap_dss_register_driver(&hdmi_driver);
+	if (result)
+		goto err_driver;
 
 	return 0;
+
+err_driver:
+	destroy_workqueue(my_workq);
+err_workqueue:
+	switch_dev_unregister(&hdmi.hpd_switch);
+	return result;
 }
 
 void hdmi_panel_exit(void)
 {
-	destroy_workqueue(my_workq);
+	cancel_delayed_work_sync(&hpd_work.dwork);
 	omap_dss_unregister_driver(&hdmi_driver);
-
+	destroy_workqueue(my_workq);
 	switch_dev_unregister(&hdmi.hpd_switch);
 }

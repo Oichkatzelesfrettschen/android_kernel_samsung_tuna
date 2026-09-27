@@ -86,6 +86,7 @@ static struct {
 	struct regulator *hdmi_reg;
 
 	int hdmi_irq;
+	int hpd_irq;
 	struct clk *sys_clk;
 	struct clk *hdmi_clk;
 
@@ -663,7 +664,7 @@ int omapdss_hdmi_get_s3d_enable(void)
 	return hdmi.s3d_enable;
 }
 
-int hdmi_get_current_hpd()
+int hdmi_get_current_hpd(void)
 {
 	return gpio_get_value(hdmi.dssdev->hpd_gpio);
 }
@@ -914,45 +915,66 @@ static int omapdss_hdmihw_probe(struct platform_device *pdev)
 	}
 
 	pm_runtime_enable(&pdev->dev);
-
-	r = request_irq(gpio_to_irq(hdmi.dssdev->hpd_gpio), hpd_irq_handler,
-			IRQF_DISABLED | IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING,
-			"hpd", NULL);
-	if (r < 0) {
-		pr_err("hdmi: request_irq %d failed\n",
-			gpio_to_irq(hdmi.dssdev->hpd_gpio));
-		return -EINVAL;
-	}
-
-	hdmi.hdmi_irq = platform_get_irq(pdev, 0);
-
-	r = request_irq(hdmi.hdmi_irq, hdmi_irq_handler, 0, "OMAP HDMI", NULL);
-	if (r < 0) {
-		pr_err("hdmi: request_irq %s failed\n",
-			pdev->name);
-		return -EINVAL;
-	}
-
 	hdmi.hdmi_data.hdmi_core_sys_offset = HDMI_CORE_SYS;
 	hdmi.hdmi_data.hdmi_core_av_offset = HDMI_CORE_AV;
 	hdmi.hdmi_data.hdmi_pll_offset = HDMI_PLLCTRL;
 	hdmi.hdmi_data.hdmi_phy_offset = HDMI_PHY;
 	hdmi.wp_reset_done = false;
 
-	hdmi_panel_init();
+	r = hdmi_panel_init();
+	if (r)
+		goto err_panel;
+
+	hdmi.hpd_irq = gpio_to_irq(hdmi.dssdev->hpd_gpio);
+	if (hdmi.hpd_irq < 0) {
+		r = hdmi.hpd_irq;
+		goto err_hpd_irq;
+	}
+
+	r = request_irq(hdmi.hpd_irq, hpd_irq_handler,
+			IRQF_DISABLED | IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING,
+			"hpd", NULL);
+	if (r < 0) {
+		pr_err("hdmi: request_irq %d failed\n", hdmi.hpd_irq);
+		goto err_hpd_irq;
+	}
+
+	hdmi.hdmi_irq = platform_get_irq(pdev, 0);
+	if (hdmi.hdmi_irq < 0) {
+		r = hdmi.hdmi_irq;
+		goto err_hdmi_irq;
+	}
+
+	r = request_irq(hdmi.hdmi_irq, hdmi_irq_handler, 0, "OMAP HDMI", NULL);
+	if (r < 0) {
+		pr_err("hdmi: request_irq %s failed\n",
+			pdev->name);
+		goto err_hdmi_irq;
+	}
 
 	if(hdmi_get_current_hpd())
 		hdmi_panel_hpd_handler(1);
 
 	return 0;
+
+err_hdmi_irq:
+	free_irq(hdmi.hpd_irq, NULL);
+err_hpd_irq:
+	hdmi_panel_exit();
+err_panel:
+	pm_runtime_disable(&pdev->dev);
+	hdmi_put_clocks();
+	iounmap(hdmi.hdmi_data.base_wp);
+	hdmi.hdmi_data.base_wp = NULL;
+	hdmi.dssdev = NULL;
+	return r;
 }
 
 static int omapdss_hdmihw_remove(struct platform_device *pdev)
 {
+	free_irq(hdmi.hpd_irq, NULL);
+	free_irq(hdmi.hdmi_irq, NULL);
 	hdmi_panel_exit();
-
-	if (hdmi.dssdev)
-		free_irq(gpio_to_irq(hdmi.dssdev->hpd_gpio), hpd_irq_handler);
 	hdmi.dssdev = NULL;
 
 	pm_runtime_disable(&pdev->dev);
