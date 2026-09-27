@@ -1323,7 +1323,7 @@ static void omap4_wait_dpll_lock(struct omap4_dpll_regs *dpll_reg)
 
 	/* Return if we dont need to lock. */
 	if ((dpll_reg->clkmode.val & OMAP4430_DPLL_EN_MASK) !=
-	     DPLL_LOCKED << OMAP4430_DPLL_EN_SHIFT);
+	     DPLL_LOCKED << OMAP4430_DPLL_EN_SHIFT)
 		return;
 
 	while ((omap4_cminst_read_inst_reg(dpll_reg->mod_partition,

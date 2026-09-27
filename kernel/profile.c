@@ -46,6 +46,15 @@ int prof_on __read_mostly;
 EXPORT_SYMBOL_GPL(prof_on);
 
 static cpumask_var_t prof_cpu_mask;
+
+static bool prof_cpu_mask_available(void)
+{
+#ifdef CONFIG_CPUMASK_OFFSTACK
+	return prof_cpu_mask != NULL;
+#else
+	return true;
+#endif
+}
 #ifdef CONFIG_SMP
 static DEFINE_PER_CPU(struct profile_hit *[2], cpu_profile_hits);
 static DEFINE_PER_CPU(int, cpu_profile_flip);
@@ -387,14 +396,14 @@ out_free:
 		return notifier_from_errno(-ENOMEM);
 	case CPU_ONLINE:
 	case CPU_ONLINE_FROZEN:
-		if (prof_cpu_mask != NULL)
+		if (prof_cpu_mask_available())
 			cpumask_set_cpu(cpu, prof_cpu_mask);
 		break;
 	case CPU_UP_CANCELED:
 	case CPU_UP_CANCELED_FROZEN:
 	case CPU_DEAD:
 	case CPU_DEAD_FROZEN:
-		if (prof_cpu_mask != NULL)
+		if (prof_cpu_mask_available())
 			cpumask_clear_cpu(cpu, prof_cpu_mask);
 		if (per_cpu(cpu_profile_hits, cpu)[0]) {
 			page = virt_to_page(per_cpu(cpu_profile_hits, cpu)[0]);
@@ -437,7 +446,7 @@ void profile_tick(int type)
 
 	if (type == CPU_PROFILING && timer_hook)
 		timer_hook(regs);
-	if (!user_mode(regs) && prof_cpu_mask != NULL &&
+	if (!user_mode(regs) && prof_cpu_mask_available() &&
 	    cpumask_test_cpu(smp_processor_id(), prof_cpu_mask))
 		profile_hit(type, (void *)profile_pc(regs));
 }
