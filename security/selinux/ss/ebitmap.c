@@ -55,7 +55,7 @@ int ebitmap_cpy(struct ebitmap *dst, struct ebitmap *src)
 	prev = NULL;
 	while (n) {
 		new = kzalloc(sizeof(*new), GFP_ATOMIC);
-		if (!new) {
+		if (ZERO_OR_NULL_PTR(new)) {
 			ebitmap_destroy(dst);
 			return -ENOMEM;
 		}
@@ -180,7 +180,7 @@ int ebitmap_netlbl_import(struct ebitmap *ebmap,
 			if (!e_iter
 			    || c_pos >= e_iter->startbit + EBITMAP_SIZE) {
 				e_iter = kzalloc(sizeof(*e_iter), GFP_ATOMIC);
-				if (!e_iter)
+				if (ZERO_OR_NULL_PTR(e_iter))
 					goto netlbl_import_failure;
 				e_iter->startbit
 					= c_pos - (c_pos % EBITMAP_SIZE);
@@ -307,7 +307,7 @@ int ebitmap_set_bit(struct ebitmap *e, unsigned long bit, int value)
 		return 0;
 
 	new = kzalloc(sizeof(*new), GFP_ATOMIC);
-	if (!new)
+	if (ZERO_OR_NULL_PTR(new))
 		return -ENOMEM;
 
 	new->startbit = bit - (bit % EBITMAP_SIZE);
@@ -405,7 +405,7 @@ int ebitmap_read(struct ebitmap *e, void *fp)
 		if (!n || startbit >= n->startbit + EBITMAP_SIZE) {
 			struct ebitmap_node *tmp;
 			tmp = kzalloc(sizeof(*tmp), GFP_KERNEL);
-			if (!tmp) {
+			if (ZERO_OR_NULL_PTR(tmp)) {
 				printk(KERN_ERR
 				       "SELinux: ebitmap: out of memory\n");
 				rc = -ENOMEM;
