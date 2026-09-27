@@ -937,6 +937,12 @@ struct link_device *dpram_create_link_device(struct platform_device *pdev)
 	struct resource *res;
 
 	BUILD_BUG_ON(sizeof(struct dpram_map) != DP_DPRAM_SIZE);
+	BUILD_BUG_ON(offsetof(struct dpram_map, fmt_out) != 0x0004);
+	BUILD_BUG_ON(offsetof(struct dpram_map, raw_out) != 0x0804);
+	BUILD_BUG_ON(offsetof(struct dpram_map, fmt_in) != 0x1ff8);
+	BUILD_BUG_ON(offsetof(struct dpram_map, raw_in) != 0x27f8);
+	BUILD_BUG_ON(offsetof(struct dpram_map, mbx_cp2ap) != 0x3ffc);
+	BUILD_BUG_ON(offsetof(struct dpram_map, mbx_ap2cp) != 0x3ffe);
 
 	dpld = kzalloc(sizeof(struct dpram_link_device), GFP_KERNEL);
 	if (!dpld)

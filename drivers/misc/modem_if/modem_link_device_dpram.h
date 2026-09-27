@@ -59,7 +59,7 @@ struct dpram_map {
 	u16	mbx_cp2ap;
 	u16	mbx_ap2cp;
 
-} __packed;
+};
 
 struct dpram_device {
 	struct dpram_circ __iomem *in;
