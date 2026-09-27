@@ -1288,11 +1288,20 @@ static int _enable(struct omap_hwmod *oh)
 	 * If an IP contains only one HW reset line, then de-assert it to have
 	 * the module functional. deassert_hardreset is currently limited only
 	 * to processor device-like IPs - IPU, DSP and IVA, so we can safely
-	 * call it after enabling clocks.
+	 * call it after enabling clocks. A hwmod with no MPU-facing OCP port
+	 * (the IVA sequencer pseudo-hwmods, reset-control only) has nothing
+	 * for _wait_target_ready() to poll below, so a hardreset that never
+	 * clears here must fail _enable() itself or the caller sees success
+	 * for a submodule still held in reset.
 	 */
 	if ((oh->_state == _HWMOD_STATE_INITIALIZED ||
-	     oh->_state == _HWMOD_STATE_DISABLED) && oh->rst_lines_cnt == 1)
-		_deassert_hardreset(oh, oh->rst_lines[0].name);
+	     oh->_state == _HWMOD_STATE_DISABLED) && oh->rst_lines_cnt == 1) {
+		r = _deassert_hardreset(oh, oh->rst_lines[0].name);
+		if (r == -EBUSY) {
+			_disable_clocks(oh);
+			return r;
+		}
+	}
 
 	r = _wait_target_ready(oh);
 	if (!r) {
