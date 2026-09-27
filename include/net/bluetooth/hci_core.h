@@ -117,7 +117,7 @@ struct hci_dev {
 	spinlock_t	lock;
 	atomic_t	refcnt;
 
-	char		name[8];
+	char		name[sizeof("hci65535")];
 	unsigned long	flags;
 	__u16		id;
 	__u8		bus;

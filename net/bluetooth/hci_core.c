@@ -1464,8 +1464,12 @@ int hci_register_dev(struct hci_dev *hdev)
 			break;
 		head = p; id++;
 	}
+	if (id > 0xffff) {
+		write_unlock_bh(&hci_dev_list_lock);
+		return -ENOSPC;
+	}
 
-	sprintf(hdev->name, "hci%d", id);
+	snprintf(hdev->name, sizeof(hdev->name), "hci%d", id);
 	hdev->id = id;
 	list_add(&hdev->list, head);
 
