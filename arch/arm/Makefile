@@ -34,7 +34,10 @@ MMUEXT		:= -nommu
 endif
 
 ifeq ($(CONFIG_FRAME_POINTER),y)
-KBUILD_CFLAGS	+=-fno-omit-frame-pointer -mapcs -mno-sched-prolog
+KBUILD_CFLAGS	+=-fno-omit-frame-pointer
+KBUILD_CFLAGS	+=$(call cc-option,-mapcs,)
+KBUILD_CFLAGS	+=$(call cc-option,-mno-sched-prolog,)
+KBUILD_CFLAGS	+=$(call cc-option,-mframe-chain=all,)
 endif
 
 ifeq ($(CONFIG_CC_STACKPROTECTOR),y)

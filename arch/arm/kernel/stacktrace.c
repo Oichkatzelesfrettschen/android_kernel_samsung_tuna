@@ -10,7 +10,7 @@
  * structure passed as argument. Unwinding is equivalent to a function return,
  * hence the new PC value rather than LR should be used for backtrace.
  *
- * With framepointer enabled, a simple function prologue looks like this:
+ * GCC's APCS frame-pointer prologue looks like this:
  *	mov	ip, sp
  *	stmdb	sp!, {fp, ip, lr, pc}
  *	sub	fp, ip, #4
@@ -18,8 +18,12 @@
  * A simple function epilogue looks like this:
  *	ldm	sp, {fp, sp, pc}
  *
- * Note that with framepointer enabled, even the leaf functions have the same
- * prologue and epilogue, therefore we can ignore the LR value in this case.
+ * Clang does not implement -mapcs.  With -fno-omit-frame-pointer and
+ * -mframe-chain=all, Clang uses an AAPCS frame record instead:
+ *	push	{..., fp, lr}
+ *	add	fp, sp, #offset-to-saved-fp
+ * The saved caller FP and LR then live at fp and fp + 4 respectively.
+ * Kernel modules must use the same frame-record convention as the kernel.
  */
 int notrace unwind_frame(struct stackframe *frame)
 {
@@ -31,13 +35,24 @@ int notrace unwind_frame(struct stackframe *frame)
 	high = ALIGN(low, THREAD_SIZE);
 
 	/* check current frame pointer is within bounds */
+#ifdef __clang__
+	if (fp < low || fp > high - 8)
+		return -EINVAL;
+
+	/* Restore the AAPCS frame record emitted by Clang. */
+	frame->fp = *(unsigned long *)fp;
+	frame->sp = fp + 8;
+	frame->lr = *(unsigned long *)(fp + 4);
+	frame->pc = frame->lr;
+#else
 	if (fp < (low + 12) || fp >= high - 4)
 		return -EINVAL;
 
-	/* restore the registers from the stack frame */
+	/* Restore the APCS frame record emitted by GCC. */
 	frame->fp = *(unsigned long *)(fp - 12);
 	frame->sp = *(unsigned long *)(fp - 8);
 	frame->pc = *(unsigned long *)(fp - 4);
+#endif
 
 	return 0;
 }
@@ -109,11 +124,9 @@ void save_stack_trace_tsk(struct task_struct *tsk, struct stack_trace *trace)
 		frame.pc = thread_saved_pc(tsk);
 #endif
 	} else {
-		register unsigned long current_sp asm ("sp");
-
 		data.no_sched_functions = 0;
 		frame.fp = (unsigned long)__builtin_frame_address(0);
-		frame.sp = current_sp;
+		frame.sp = current_stack_pointer;
 		frame.lr = (unsigned long)__builtin_return_address(0);
 		frame.pc = (unsigned long)save_stack_trace_tsk;
 	}
