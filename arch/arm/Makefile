@@ -58,6 +58,18 @@ comma = ,
 # macro, but instead defines a whole series of macros which makes
 # testing for a specific architecture or later rather impossible.
 arch-$(CONFIG_CPU_32v7)		:=-D__LINUX_ARM_ARCH__=7 $(call cc-option,-march=armv7-a,-march=armv5t -Wa$(comma)-march=armv7-a)
+
+# OMAP4460's dual Cortex-A9 cores set CONFIG_ARCH_OMAP4 (select chain via
+# CONFIG_CPU_V7 -> CONFIG_CPU_32v7 above), which otherwise builds at the
+# generic armv7-a ISA baseline with no CPU-specific scheduling or ISA
+# subset. -mcpu=cortex-a9 (both compilers accept it; verified against
+# both this tree's GCC 4.9 prebuilt and clang 22 directly) restricts
+# codegen to the A9's actual instruction set -- VFPv3 + NEON, no integer
+# divide, unlike Cortex-A15/Krait or a real armv7ve part -- and schedules
+# for its pipeline. It replaces this file's own -march=armv7-a rather
+# than appending to it, matching this Makefile's existing convention for
+# the MSM Krait/Cortex-A7 rows further down.
+arch-$(CONFIG_ARCH_OMAP4)	:=-D__LINUX_ARM_ARCH__=7 $(call cc-option,-mcpu=cortex-a9,-march=armv7-a)
 arch-$(CONFIG_CPU_32v6)		:=-D__LINUX_ARM_ARCH__=6 $(call cc-option,-march=armv6,-march=armv5t -Wa$(comma)-march=armv6)
 # Only override the compiler option if ARMv6. The ARMv6K extensions are
 # always available in ARMv7
