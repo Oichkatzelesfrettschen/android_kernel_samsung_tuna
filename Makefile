@@ -369,10 +369,9 @@ KBUILD_CFLAGS   := -Wall -Wundef -Wstrict-prototypes -Wno-trigraphs \
 		   -Werror-implicit-function-declaration \
 		   -Wno-format-security \
                    $(call cc-option,-fmodulo-sched) $(call cc-option,-fmodulo-sched-allow-regmoves) \
-		   -march=armv7-a -mcpu=cortex-a9 -mtune=cortex-a9 \
                    $(call cc-option,-funswitch-loops) $(call cc-option,-fpredictive-commoning) $(call cc-option,-fgcse-after-reload) \
 		   -fno-delete-null-pointer-checks \
-		   $(call cc-option,-fgnu89-inline)
+		   $(call cc-option,-std=gnu89)
 KBUILD_AFLAGS_KERNEL :=
 KBUILD_CFLAGS_KERNEL :=
 KBUILD_AFLAGS   := -D__ASSEMBLY__
