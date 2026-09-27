@@ -2835,7 +2835,7 @@ int dispc_setup_wb(struct writeback_cache_data *wb)
 	return 0;
 }
 
-void dispc_go_wb()
+void dispc_go_wb(void)
 {
 	if (REG_GET(DISPC_CONTROL2, 6, 6)) {
 		DSSERR("GO bit already set for WB\n");
@@ -4296,13 +4296,13 @@ static void dispc_error_worker(struct work_struct *work)
 	dispc_runtime_put();
 }
 
+static void dispc_irq_wait_handler(void *data, u32 mask)
+{
+	complete((struct completion *)data);
+}
+
 int omap_dispc_wait_for_irq_timeout(u32 irqmask, unsigned long timeout)
 {
-	void dispc_irq_wait_handler(void *data, u32 mask)
-	{
-		complete((struct completion *)data);
-	}
-
 	int r;
 	DECLARE_COMPLETION_ONSTACK(completion);
 
@@ -4315,6 +4315,7 @@ int omap_dispc_wait_for_irq_timeout(u32 irqmask, unsigned long timeout)
 	timeout = wait_for_completion_timeout(&completion, timeout);
 
 	omap_dispc_unregister_isr(dispc_irq_wait_handler, &completion, irqmask);
+	synchronize_irq(dispc.irq);
 
 	if (timeout == 0)
 		return -ETIMEDOUT;
@@ -4328,11 +4329,6 @@ int omap_dispc_wait_for_irq_timeout(u32 irqmask, unsigned long timeout)
 int omap_dispc_wait_for_irq_interruptible_timeout(u32 irqmask,
 		unsigned long timeout)
 {
-	void dispc_irq_wait_handler(void *data, u32 mask)
-	{
-		complete((struct completion *)data);
-	}
-
 	int r;
 	DECLARE_COMPLETION_ONSTACK(completion);
 
@@ -4350,6 +4346,7 @@ int omap_dispc_wait_for_irq_interruptible_timeout(u32 irqmask,
 			timeout);
 
 	omap_dispc_unregister_isr(dispc_irq_wait_handler, &completion, irqmask);
+	synchronize_irq(dispc.irq);
 
 	if (timeout == 0)
 		r = -ETIMEDOUT;
