@@ -66,6 +66,9 @@ static ssize_t manager_display_store(struct omap_overlay_manager *mgr,
 	size_t len = size;
 	struct omap_dss_device *dssdev = NULL;
 
+	if (!size)
+		return -EINVAL;
+
 	if (buf[size-1] == '\n')
 		--len;
 
