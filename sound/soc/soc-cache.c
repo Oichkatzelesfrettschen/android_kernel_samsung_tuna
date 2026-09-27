@@ -487,7 +487,7 @@ struct snd_soc_rbtree_node {
 	unsigned int reg;
 	unsigned int value;
 	unsigned int defval;
-} __attribute__ ((packed));
+};
 
 struct snd_soc_rbtree_ctx {
 	struct rb_root root;
