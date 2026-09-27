@@ -42,7 +42,7 @@ void __init omap_pmic_init(int bus, u32 clkrate,
 			   const char *pmic_type, int pmic_irq,
 			   struct twl4030_platform_data *pmic_data)
 {
-	strncpy(pmic_i2c_board_info.type, pmic_type,
+	strlcpy(pmic_i2c_board_info.type, pmic_type,
 		sizeof(pmic_i2c_board_info.type));
 	pmic_i2c_board_info.irq = pmic_irq;
 	pmic_i2c_board_info.platform_data = pmic_data;

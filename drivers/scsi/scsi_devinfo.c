@@ -282,7 +282,7 @@ static void scsi_strcpy_devinfo(char *name, char *to, size_t to_length,
 	size_t from_length;
 
 	from_length = strlen(from);
-	strncpy(to, from, min(to_length, from_length));
+	memcpy(to, from, min(to_length, from_length));
 	if (from_length < to_length) {
 		if (compatible) {
 			/*
@@ -509,8 +509,9 @@ static int scsi_dev_info_list_add_str(char *dev_list)
 			strflags = strsep(&next, next_check);
 		if (!model || !strflags) {
 			printk(KERN_ERR "%s: bad dev info string '%s' '%s'"
-			       " '%s'\n", __func__, vendor, model,
-			       strflags);
+			       " '%s'\n", __func__, vendor,
+			       model ? model : "(missing)",
+			       strflags ? strflags : "(missing)");
 			res = -EINVAL;
 		} else
 			res = scsi_dev_info_list_add(0 /* compatible */, vendor,
