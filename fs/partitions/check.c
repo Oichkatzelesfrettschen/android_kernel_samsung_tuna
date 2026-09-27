@@ -124,12 +124,20 @@ static int (*check_part[])(struct parsed_partitions *) = {
 
 char *disk_name(struct gendisk *hd, int partno, char *buf)
 {
+	char suffix[16];
+	size_t disk_name_length;
+
 	if (!partno)
-		snprintf(buf, BDEVNAME_SIZE, "%s", hd->disk_name);
-	else if (isdigit(hd->disk_name[strlen(hd->disk_name)-1]))
-		snprintf(buf, BDEVNAME_SIZE, "%sp%d", hd->disk_name, partno);
-	else
-		snprintf(buf, BDEVNAME_SIZE, "%s%d", hd->disk_name, partno);
+		strlcpy(buf, hd->disk_name, BDEVNAME_SIZE);
+	else {
+		disk_name_length = strlen(hd->disk_name);
+		snprintf(suffix, sizeof(suffix), "%s%d",
+			 disk_name_length &&
+			 isdigit(hd->disk_name[disk_name_length - 1]) ? "p" : "",
+			 partno);
+		strlcpy(buf, hd->disk_name, BDEVNAME_SIZE - strlen(suffix));
+		strlcat(buf, suffix, BDEVNAME_SIZE);
+	}
 
 	return buf;
 }
