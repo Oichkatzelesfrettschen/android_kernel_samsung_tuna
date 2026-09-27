@@ -34,6 +34,7 @@
 # include <linux/efi.h>
 #endif
 
+#if defined(CONFIG_DEVMEM) || defined(CONFIG_DEVKMEM)
 static inline unsigned long size_inside_page(unsigned long start,
 					     unsigned long size)
 {
@@ -43,6 +44,7 @@ static inline unsigned long size_inside_page(unsigned long start,
 
 	return min(sz, size);
 }
+#endif
 
 #ifndef ARCH_HAS_VALID_PHYS_ADDR_RANGE
 static inline int valid_phys_addr_range(unsigned long addr, size_t count)
