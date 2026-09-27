@@ -171,6 +171,10 @@ static int _pwrdm_state_switch(struct powerdomain *pwrdm, int flag)
 		return -EINVAL;
 
 	state = pwrdm_read_pwrst(pwrdm);
+	if (state < 0)
+		return state;
+	if (state >= ARRAY_SIZE(pwrdm->count.state))
+		return -EINVAL;
 
 	switch (flag) {
 	case PWRDM_STATE_NOW:
@@ -178,6 +182,10 @@ static int _pwrdm_state_switch(struct powerdomain *pwrdm, int flag)
 		break;
 	case PWRDM_STATE_PREV:
 		prev = pwrdm_read_prev_pwrst(pwrdm);
+		if (prev < 0)
+			return prev;
+		if (prev >= ARRAY_SIZE(pwrdm->count.state))
+			return -EINVAL;
 		if (pwrdm->state != prev)
 			pwrdm->count.state[prev]++;
 		if (prev == PWRDM_POWER_RET)
@@ -197,6 +205,8 @@ static int _pwrdm_state_switch(struct powerdomain *pwrdm, int flag)
 	default:
 		return -EINVAL;
 	}
+	if (prev < 0 || prev >= ARRAY_SIZE(pwrdm->count.state))
+		return -EINVAL;
 
 	if (state != prev)
 		pwrdm->count.state[state]++;

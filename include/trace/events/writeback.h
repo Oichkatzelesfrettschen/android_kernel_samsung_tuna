@@ -26,7 +26,7 @@ DECLARE_EVENT_CLASS(writeback_work_class,
 		struct device *dev = bdi->dev;
 		if (!dev)
 			dev = default_backing_dev_info.dev;
-		strncpy(__entry->name, dev_name(dev), 32);
+		strlcpy(__entry->name, dev_name(dev), sizeof(__entry->name));
 		__entry->nr_pages = work->nr_pages;
 		__entry->sb_dev = work->sb ? work->sb->s_dev : 0;
 		__entry->sync_mode = work->sync_mode;
@@ -72,7 +72,7 @@ DECLARE_EVENT_CLASS(writeback_class,
 		__array(char, name, 32)
 	),
 	TP_fast_assign(
-		strncpy(__entry->name, dev_name(bdi->dev), 32);
+		strlcpy(__entry->name, dev_name(bdi->dev), sizeof(__entry->name));
 	),
 	TP_printk("bdi %s",
 		  __entry->name
@@ -111,7 +111,7 @@ DECLARE_EVENT_CLASS(wbc_class,
 	),
 
 	TP_fast_assign(
-		strncpy(__entry->name, dev_name(bdi->dev), 32);
+		strlcpy(__entry->name, dev_name(bdi->dev), sizeof(__entry->name));
 		__entry->nr_to_write	= wbc->nr_to_write;
 		__entry->pages_skipped	= wbc->pages_skipped;
 		__entry->sync_mode	= wbc->sync_mode;
