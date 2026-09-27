@@ -189,7 +189,7 @@ static inline u32 usbhs_read(void __iomem *base, u32 reg)
 	return __raw_readl(base + reg);
 }
 
-static inline void usbhs_writeb(void __iomem *base, u8 reg, u8 val)
+static inline void usbhs_writeb(void __iomem *base, u32 reg, u8 val)
 {
 	__raw_writeb(val, base + reg);
 }
