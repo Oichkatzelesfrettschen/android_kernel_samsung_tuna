@@ -713,7 +713,7 @@ baddataabort(int code, unsigned long instr, struct pt_regs *regs)
 void __attribute__((noreturn)) __bug(const char *file, int line)
 {
 	printk(KERN_CRIT"kernel BUG at %s:%d!\n", file, line);
-	*(int *)0 = 0;
+	*(volatile int *)0 = 0;
 
 	/* Avoid "noreturn function does return" */
 	for (;;);

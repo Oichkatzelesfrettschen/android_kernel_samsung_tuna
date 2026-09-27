@@ -104,19 +104,6 @@ static inline union cpu_time_count cpu_time_sub(const clockid_t which_clock,
 }
 
 /*
- * Divide and limit the result to res >= 1
- *
- * This is necessary to prevent signal delivery starvation, when the result of
- * the division would be rounded down to 0.
- */
-static inline cputime_t cputime_div_non_zero(cputime_t time, unsigned long div)
-{
-	cputime_t res = cputime_div(time, div);
-
-	return max_t(cputime_t, res, 1);
-}
-
-/*
  * Update expiry time from increment, and increase overrun count,
  * given the current clock sample.
  */
@@ -1205,7 +1192,9 @@ void posix_cpu_timer_schedule(struct k_itimer *timer)
 			timer->it.cpu.task = p = NULL;
 			timer->it.cpu.expires.sched = 0;
 			goto out_unlock;
-		} else if (unlikely(p->exit_state) && thread_group_empty(p)) {
+		}
+		cpu_timer_sample_group(timer->it_clock, p, &now);
+		if (unlikely(p->exit_state) && thread_group_empty(p)) {
 			/*
 			 * We've noticed that the thread is dead, but
 			 * not yet reaped.  Take this opportunity to
@@ -1215,7 +1204,6 @@ void posix_cpu_timer_schedule(struct k_itimer *timer)
 			goto out_unlock;
 		}
 		spin_lock(&p->sighand->siglock);
-		cpu_timer_sample_group(timer->it_clock, p, &now);
 		bump_cpu_timer(timer, now);
 		/* Leave the tasklist_lock locked for the call below.  */
 	}

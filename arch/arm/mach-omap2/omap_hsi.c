@@ -244,7 +244,7 @@ static struct hsi_port_ctx *hsi_get_hsi_port_ctx_data(int hsi_port)
 static int omap_hsi_is_io_pad_hsi(int hsi_port)
 {
 	struct hsi_port_ctx *port_ctx;
-	u16 val;
+	int val;
 
 	port_ctx = hsi_get_hsi_port_ctx_data(hsi_port);
 	if (!port_ctx)
@@ -277,7 +277,7 @@ bool omap_hsi_is_io_wakeup_from_hsi(int *hsi_port)
 {
 #ifdef CONFIG_MACH_TUNA
 	struct hsi_port_ctx *port_ctx;
-	u16 val;
+	int val;
 	int i;
 
 	for (i = 0; i < omap_hsi_platform_data.num_ports; i++) {
