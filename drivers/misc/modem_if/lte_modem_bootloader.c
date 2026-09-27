@@ -66,7 +66,10 @@ int spi_xmit(struct lte_modem_bootloader *loader,
 	struct spi_message msg;
 	struct spi_transfer xfers[MAX_XMIT_SIZE];
 
-	memcpy(xmit_buf, buf, sizeof(xmit_buf));
+	if (size_per_xmit <= 0 || size_per_xmit > MAX_XMIT_SIZE)
+		return -EINVAL;
+
+	memcpy(xmit_buf, buf, size_per_xmit);
 	spi_message_init(&msg);
 	memset(xfers, 0, sizeof(xfers));
 	for (i = 0; i < size_per_xmit ; i++) {
@@ -87,11 +90,16 @@ int spi_xmit(struct lte_modem_bootloader *loader,
 
 static
 int bootloader_write(struct lte_modem_bootloader *loader,
-		const char *addr, const int len)
+		const char __user *addr, const int len)
 {
-	int i;
+	size_t offset;
+	int chunk_size;
 	int ret = 0;
 	unsigned char lenbuf[4];
+	unsigned char chunk[MAX_XMIT_SIZE];
+
+	if (len <= 0)
+		return -EINVAL;
 
 	if (loader->xmit_status == XMIT_LOADER_READY) {
 		memcpy(lenbuf, &len, ARRAY_SIZE(lenbuf));
@@ -102,14 +110,14 @@ int bootloader_write(struct lte_modem_bootloader *loader,
 		msleep(LEN_XMIT_DELEY);
 	}
 
-	for (i = 0 ; i < len / MAX_XMIT_SIZE ; i++) {
-		ret = spi_xmit(loader,
-				addr + i * MAX_XMIT_SIZE,
-				MAX_XMIT_SIZE);
+	for (offset = 0; offset < len; offset += chunk_size) {
+		chunk_size = min_t(size_t, len - offset, sizeof(chunk));
+		if (copy_from_user(chunk, addr + offset, chunk_size))
+			return -EFAULT;
+		ret = spi_xmit(loader, chunk, chunk_size);
 		if (ret < 0)
 			return ret;
 	}
-	ret = spi_xmit(loader, addr + i * MAX_XMIT_SIZE , len % MAX_XMIT_SIZE);
 
 	return 0;
 }
