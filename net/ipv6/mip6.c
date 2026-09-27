@@ -212,6 +212,8 @@ static int mip6_destopt_reject(struct xfrm_state *x, struct sk_buff *skb,
 	struct inet6_skb_parm *opt = (struct inet6_skb_parm *)skb->cb;
 	const struct flowi6 *fl6 = &fl->u.ip6;
 	struct ipv6_destopt_hao *hao = NULL;
+	struct in6_addr home_addr;
+	const struct in6_addr *report_src = &ipv6_hdr(skb)->saddr;
 	struct xfrm_selector sel;
 	int offset;
 	struct timeval stamp;
@@ -227,12 +229,15 @@ static int mip6_destopt_reject(struct xfrm_state *x, struct sk_buff *skb,
 			hao = (struct ipv6_destopt_hao *)
 					(skb_network_header(skb) + offset);
 	}
+	if (hao) {
+		memcpy(&home_addr, &hao->addr, sizeof(home_addr));
+		report_src = &home_addr;
+	}
 
 	skb_get_timestamp(skb, &stamp);
 
 	if (!mip6_report_rl_allow(&stamp, &ipv6_hdr(skb)->daddr,
-				  hao ? &hao->addr : &ipv6_hdr(skb)->saddr,
-				  opt->iif))
+				  report_src, opt->iif))
 		goto out;
 
 	memset(&sel, 0, sizeof(sel));
@@ -253,7 +258,7 @@ static int mip6_destopt_reject(struct xfrm_state *x, struct sk_buff *skb,
 	sel.ifindex = fl6->flowi6_oif;
 
 	err = km_report(net, IPPROTO_DSTOPTS, &sel,
-			(hao ? (xfrm_address_t *)&hao->addr : NULL));
+			(hao ? (xfrm_address_t *)&home_addr : NULL));
 
  out:
 	return err;
