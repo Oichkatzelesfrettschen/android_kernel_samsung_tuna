@@ -84,6 +84,8 @@ void _wordcopy_fwd_aligned (long int dstp, long int srcp, size_t len)
 		if (OP_T_THRESHOLD <= 3 * OPSIZ && len == 0)
 			goto do0;
 		goto do8;			/* No-op.  */
+	default:
+		return;
 	}
 
 	do {
@@ -182,6 +184,8 @@ void _wordcopy_fwd_dest_aligned (long int dstp, long int srcp, size_t len)
 		if (OP_T_THRESHOLD <= 3 * OPSIZ && len == 0)
 			goto do0;
 		goto do4;			/* No-op. */
+	default:
+		return;
 	}
 
 	do {
@@ -273,6 +277,8 @@ void _wordcopy_bwd_aligned (long int dstp, long int srcp, size_t len)
 		if (OP_T_THRESHOLD <= 3 * OPSIZ && len == 0)
 			goto do0;
 		goto do8;			/* No-op.  */
+	default:
+		return;
 	}
 
 	do {
@@ -372,6 +378,8 @@ void _wordcopy_bwd_dest_aligned (long int dstp, long int srcp, size_t len)
 		if (OP_T_THRESHOLD <= 3 * OPSIZ && len == 0)
 			goto do0;
 		goto do4;			/* No-op.  */
+	default:
+		return;
 	}
 
 	do {
@@ -400,4 +408,3 @@ do1:
 do0:
 	((op_t *) dstp)[3] = MERGE (a0, sh_1, a1, sh_2);
 }
-
