@@ -113,17 +113,17 @@ static ssize_t rproc_format_trace_buf(char __user *userbuf, size_t count,
 	if (i > w_pos)
 		num_copied = simple_read_from_buffer(userbuf, count,
 							ppos, src, i);
-		if (!num_copied) {
-			from_beg = 1;
-			*ppos = 0;
+	if (!num_copied) {
+		from_beg = 1;
+		*ppos = 0;
 #ifdef CONFIG_MACH_TUNA
-		} else {
-			ret = num_copied;
-			goto unlock;
-		}
+	} else {
+		ret = num_copied;
+		goto unlock;
+	}
 #else
-		} else
-			return num_copied;
+	} else
+		return num_copied;
 #endif
 
 print_beg:
@@ -327,14 +327,15 @@ static int setup_rproc_elf_core_dump(struct core_rproc *d)
 {
 	short __phnum;
 	struct elf_phdr *nphdr;
+	struct elfhdr elf_header;
+	struct pt_regs regs;
 #ifdef CONFIG_MACH_TUNA
 	struct exc_regs *xregs = d->rproc->cdump_buf1;
-	struct pt_regs *regs =
-		(struct pt_regs *)&d->core.core_note.prstatus.pr_reg;
 #else
 	struct exc_regs *xregs;
-	struct pt_regs *regs;
 #endif
+	BUILD_BUG_ON(sizeof(regs) !=
+		     sizeof(d->core.core_note.prstatus.pr_reg));
 
 	memset(&d->core.elf, 0, sizeof(d->core.elf));
 
@@ -345,7 +346,8 @@ static int setup_rproc_elf_core_dump(struct core_rproc *d)
 
 	pr_info("number of segments: %d\n", d->e_phnum);
 
-	fill_elf_header(&d->core.elf, d->e_phnum);
+	fill_elf_header(&elf_header, d->e_phnum);
+	memcpy(&d->core.elf, &elf_header, sizeof(elf_header));
 
 	nphdr = d->core.phdr + __phnum;
 	nphdr->p_type    = PT_NOTE;
@@ -373,11 +375,14 @@ static int setup_rproc_elf_core_dump(struct core_rproc *d)
 	/* fill in registers for ipu only, dsp yet to be supported */
 	if (!strcmp(d->rproc->name, "ipu")) {
 		xregs = d->rproc->cdump_buf1;
-		regs = (struct pt_regs *)&d->core.core_note.prstatus.pr_reg;
-		remoteproc_fill_pt_regs(regs, xregs);
+		remoteproc_fill_pt_regs(&regs, xregs);
+		memcpy(&d->core.core_note.prstatus.pr_reg, &regs,
+		       sizeof(regs));
 	}
 #else
-	remoteproc_fill_pt_regs(regs, xregs);
+	remoteproc_fill_pt_regs(&regs, xregs);
+	memcpy(&d->core.core_note.prstatus.pr_reg, &regs,
+	       sizeof(regs));
 #endif
 
 	/* We ignore the NVIC registers for now */
