@@ -750,6 +750,7 @@ static int sii9234_cbus_reset(struct sii9234_data *sii9234)
 
 static int sii9234_cbus_init(struct sii9234_data *sii9234)
 {
+	int ret;
 	u8 value;
 
 	cbus_write_reg(sii9234, 0x07, 0x32);
@@ -780,13 +781,21 @@ static int sii9234_cbus_init(struct sii9234_data *sii9234)
 	cbus_write_reg(sii9234, 0x8E, 0x44);
 	cbus_write_reg(sii9234, 0x8F, 0);
 
-	cbus_read_reg(sii9234, 0x31, &value);
+	ret = cbus_read_reg(sii9234, 0x31, &value);
+	if (ret < 0)
+		return ret;
 	value |= 0x0C;
-	cbus_write_reg(sii9234, 0x31, value);
+	ret = cbus_write_reg(sii9234, 0x31, value);
+	if (ret < 0)
+		return ret;
 
-	cbus_read_reg(sii9234, 0x22, &value);
+	ret = cbus_read_reg(sii9234, 0x22, &value);
+	if (ret < 0)
+		return ret;
 	value &= 0x0F;
-	cbus_write_reg(sii9234, 0x22, value);
+	ret = cbus_write_reg(sii9234, 0x22, value);
+	if (ret < 0)
+		return ret;
 
 	cbus_write_reg(sii9234, 0x30, 0x01);
 
@@ -1181,7 +1190,9 @@ static int sii9234_detection_callback(struct otg_id_notifier_block *nb)
 	if (ret < 0)
 		goto unhandled;
 
-	sii9234_cbus_init(sii9234);
+	ret = sii9234_cbus_init(sii9234);
+	if (ret < 0)
+		goto unhandled;
 
 	/* Enable Auto soft reset on SCDT = 0*/
 	ret = mhl_tx_write_reg(sii9234, 0x05, 0x04);
@@ -1653,14 +1664,30 @@ static int sii9234_cbus_irq(struct sii9234_data *sii9234)
 
 	int ret = 0;
 
-	cbus_read_reg(sii9234, CBUS_INT_STATUS_1_REG, &cbus_intr1);
-	cbus_read_reg(sii9234, CBUS_INT_STATUS_2_REG, &cbus_intr2);
-	cbus_read_reg(sii9234, CBUS_MHL_INTR_REG_0, &mhl_intr0);
-	cbus_read_reg(sii9234, CBUS_MHL_INTR_REG_1, &mhl_intr1);
-	cbus_read_reg(sii9234, CBUS_MHL_STATUS_REG_0, &mhl_status0);
-	cbus_read_reg(sii9234, CBUS_MHL_STATUS_REG_1, &mhl_status1);
-	cbus_read_reg(sii9234, CBUS_MHL_STATUS_REG_2, &mhl_status2);
-	cbus_read_reg(sii9234, CBUS_MHL_STATUS_REG_3, &mhl_status3);
+	ret = cbus_read_reg(sii9234, CBUS_INT_STATUS_1_REG, &cbus_intr1);
+	if (ret < 0)
+		return ret;
+	ret = cbus_read_reg(sii9234, CBUS_INT_STATUS_2_REG, &cbus_intr2);
+	if (ret < 0)
+		return ret;
+	ret = cbus_read_reg(sii9234, CBUS_MHL_INTR_REG_0, &mhl_intr0);
+	if (ret < 0)
+		return ret;
+	ret = cbus_read_reg(sii9234, CBUS_MHL_INTR_REG_1, &mhl_intr1);
+	if (ret < 0)
+		return ret;
+	ret = cbus_read_reg(sii9234, CBUS_MHL_STATUS_REG_0, &mhl_status0);
+	if (ret < 0)
+		return ret;
+	ret = cbus_read_reg(sii9234, CBUS_MHL_STATUS_REG_1, &mhl_status1);
+	if (ret < 0)
+		return ret;
+	ret = cbus_read_reg(sii9234, CBUS_MHL_STATUS_REG_2, &mhl_status2);
+	if (ret < 0)
+		return ret;
+	ret = cbus_read_reg(sii9234, CBUS_MHL_STATUS_REG_3, &mhl_status3);
+	if (ret < 0)
+		return ret;
 
 	pr_debug("sii9234: cbus_intr %02x %02x\n", cbus_intr1, cbus_intr2);
 
@@ -1697,8 +1724,18 @@ static int sii9234_cbus_irq(struct sii9234_data *sii9234)
 			goto err_exit;
 		}
 		data->cmd = MSC_MSG;
-		cbus_read_reg(sii9234, CBUS_MSC_MSG_CMD_IN, &data->offset);
-		cbus_read_reg(sii9234, CBUS_MSC_MSG_DATA_IN, &data->data);
+		ret = cbus_read_reg(sii9234, CBUS_MSC_MSG_CMD_IN,
+				    &data->offset);
+		if (ret < 0) {
+			kfree(data);
+			goto err_exit;
+		}
+		ret = cbus_read_reg(sii9234, CBUS_MSC_MSG_DATA_IN,
+				    &data->data);
+		if (ret < 0) {
+			kfree(data);
+			goto err_exit;
+		}
 		list_add_tail(&data->list, &sii9234->msc_data_list);
 
 		schedule_work(&sii9234->msc_work);
@@ -1825,11 +1862,19 @@ static irqreturn_t sii9234_irq_thread(int irq, void *data)
 	bool release_otg = false;
 
 	mutex_lock(&sii9234->lock);
-	mhl_tx_read_reg(sii9234, MHL_TX_INTR1_REG, &intr1);
-	mhl_tx_read_reg(sii9234, MHL_TX_INTR4_REG, &intr4);
+	ret = mhl_tx_read_reg(sii9234, MHL_TX_INTR1_REG, &intr1);
+	if (ret < 0)
+		goto io_error;
+	ret = mhl_tx_read_reg(sii9234, MHL_TX_INTR4_REG, &intr4);
+	if (ret < 0)
+		goto io_error;
 
-	mhl_tx_read_reg(sii9234, MHL_TX_INTR1_ENABLE_REG, &intr1_en);
-	mhl_tx_read_reg(sii9234, MHL_TX_INTR4_ENABLE_REG, &intr4_en);
+	ret = mhl_tx_read_reg(sii9234, MHL_TX_INTR1_ENABLE_REG, &intr1_en);
+	if (ret < 0)
+		goto io_error;
+	ret = mhl_tx_read_reg(sii9234, MHL_TX_INTR4_ENABLE_REG, &intr4_en);
+	if (ret < 0)
+		goto io_error;
 	pr_debug("sii9234: irq %02x/%02x %02x/%02x\n", intr1, intr1_en,
 		 intr4, intr4_en);
 
@@ -1838,7 +1883,7 @@ static irqreturn_t sii9234_irq_thread(int irq, void *data)
 		if (ret < 0) {
 			dev_err(&sii9234->pdata->mhl_tx_client->dev,
 					"STAT2 reg, err %d\n", ret);
-			goto err_exit;
+			goto io_error;
 		}
 
 		switch (value & RGND_INTP_MASK) {
@@ -1890,6 +1935,8 @@ static irqreturn_t sii9234_irq_thread(int irq, void *data)
 
 	if (intr1 & HPD_CHANGE_INT) {
 		ret = cbus_read_reg(sii9234, MSC_REQ_ABORT_REASON_REG, &value);
+		if (ret < 0)
+			goto io_error;
 
 		if (value & SET_HPD_DOWNSTREAM) {
 			/* Downstream HPD Highi */
@@ -1917,6 +1964,8 @@ static irqreturn_t sii9234_irq_thread(int irq, void *data)
 
 	if (intr1 & RSEN_CHANGE_INT) {
 		ret = mhl_tx_read_reg(sii9234, MHL_TX_SYSSTAT_REG, &value);
+		if (ret < 0)
+			goto io_error;
 
 		sii9234->rsen = value & RSEN_STATUS;
 
@@ -1935,6 +1984,8 @@ static irqreturn_t sii9234_irq_thread(int irq, void *data)
 					T_SRC_RXSENSE_DEGLITCH * USEC_PER_MSEC);
 			ret = mhl_tx_read_reg(sii9234, MHL_TX_SYSSTAT_REG,
 								&value);
+			if (ret < 0)
+				goto io_error;
 			pr_cont(" sys_stat:%x\n", value);
 			if ((value & RSEN_STATUS) == 0) {
 				/* Notify Disconnection to OTG */
@@ -1961,10 +2012,21 @@ static irqreturn_t sii9234_irq_thread(int irq, void *data)
 		}
 	}
 
-err_exit:
+
 	mhl_tx_write_reg(sii9234, MHL_TX_INTR1_REG, intr1);
 	mhl_tx_write_reg(sii9234, MHL_TX_INTR4_REG, intr4);
+	goto unlock;
 
+io_error:
+	dev_err(&sii9234->pdata->mhl_tx_client->dev,
+		"interrupt register read failed: %d\n", ret);
+	if (sii9234->claimed) {
+		disable_irq_nosync(sii9234->irq);
+		release_otg = true;
+	}
+	sii9234_power_down(sii9234);
+
+unlock:
 	mutex_unlock(&sii9234->lock);
 
 	pr_debug("si9234: wake_up\n");
