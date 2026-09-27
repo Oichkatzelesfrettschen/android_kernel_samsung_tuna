@@ -56,6 +56,33 @@ struct omap_rproc_priv {
 #endif
 };
 
+/*
+ * pdata->timers holds every GP-timer the rproc reserves at start time,
+ * including the GPT9/GPT11 (ipu) or GPT6 (dsp) watchdog pair under
+ * CONFIG_REMOTEPROC_WATCHDOG (arch/arm/mach-omap2/remoteproc.c's
+ * ipu_timers[]/dsp_timers[]). Stopping and restarting the whole array
+ * together, not just the watchdog pair, matches the remote core's own
+ * state: every one of these timers is serviced by the remote core, so
+ * none of them means anything running while it is asleep.
+ */
+static void omap_rproc_timers_stop(struct omap_rproc_pdata *pdata)
+{
+	struct omap_rproc_timers_info *timers = pdata->timers;
+	int i;
+
+	for (i = 0; i < pdata->timers_cnt; i++)
+		omap_dm_timer_stop(timers[i].odt);
+}
+
+static void omap_rproc_timers_start(struct omap_rproc_pdata *pdata)
+{
+	struct omap_rproc_timers_info *timers = pdata->timers;
+	int i;
+
+	for (i = 0; i < pdata->timers_cnt; i++)
+		omap_dm_timer_start(timers[i].odt);
+}
+
 #ifdef CONFIG_REMOTE_PROC_AUTOSUSPEND
 static bool _may_suspend(struct omap_rproc_priv *rpp)
 {
@@ -90,18 +117,42 @@ static int _suspend(struct omap_rproc_priv *rpp, bool force)
 #endif
 }
 
+/*
+ * Stop the watchdog timers (GPT9/GPT11 on ipu, GPT6 on dsp, under
+ * CONFIG_REMOTEPROC_WATCHDOG) after _suspend()'s mailbox handshake
+ * confirms the remote core reached its own idle state. Read alone,
+ * omap_hwmod's _enable() (arch/arm/mach-omap2/omap_hwmod.c) treats a
+ * failed hardreset deassert as success on a hwmod with no MPU-facing
+ * OCP port, so the watchdog is the only signal that the remote core's
+ * IVA sequencers stopped responding; that signal is meaningless once
+ * the ARM side has itself asked the remote core to go idle, since the
+ * remote core then legitimately stops servicing the timer. Restarted
+ * in omap_resume() before the remote core runs again.
+ */
 static int omap_suspend(struct rproc *rproc, bool force)
 {
 	struct omap_rproc_priv *rpp = rproc->priv;
+	int ret;
 
-	if (rpp->idle && (force || _may_suspend(rpp)))
+	if (!rpp->idle || !(force || _may_suspend(rpp)))
+		return -EBUSY;
+
 #ifdef CONFIG_MACH_TUNA
-		return _suspend(rpp);
+	ret = _suspend(rpp);
 #else
-		return _suspend(rpp, force);
+	ret = _suspend(rpp, force);
 #endif
+	if (!ret)
+		omap_rproc_timers_stop(rproc->dev->platform_data);
 
-	return -EBUSY;
+	return ret;
+}
+
+static int omap_resume(struct rproc *rproc)
+{
+	omap_rproc_timers_start(rproc->dev->platform_data);
+
+	return 0;
 }
 #endif
 
@@ -229,7 +280,6 @@ int omap_rproc_activate(struct omap_device *od)
 	struct rproc *rproc = platform_get_drvdata(&od->pdev);
 	struct device *dev = rproc->dev;
 	struct omap_rproc_pdata *pdata = dev->platform_data;
-	struct omap_rproc_timers_info *timers = pdata->timers;
 	struct omap_rproc_priv *rpp = rproc->priv;
 #ifdef CONFIG_REMOTE_PROC_AUTOSUSPEND
 	struct iommu *iommu;
@@ -263,14 +313,12 @@ int omap_rproc_activate(struct omap_device *od)
 	if (pdata->clkdm)
 		clkdm_wakeup(pdata->clkdm);
 
-	for (i = 0; i < pdata->timers_cnt; i++)
-		omap_dm_timer_start(timers[i].odt);
+	omap_rproc_timers_start(pdata);
 
 	for (i = 0; i < od->hwmods_cnt; i++) {
 		ret = omap_hwmod_enable(od->hwmods[i]);
 		if (ret) {
-			for (i = 0; i < pdata->timers_cnt; i++)
-				omap_dm_timer_stop(timers[i].odt);
+			omap_rproc_timers_stop(pdata);
 			break;
 		}
 	}
@@ -292,7 +340,6 @@ int omap_rproc_deactivate(struct omap_device *od)
 	struct rproc *rproc = platform_get_drvdata(&od->pdev);
 	struct device *dev = rproc->dev;
 	struct omap_rproc_pdata *pdata = dev->platform_data;
-	struct omap_rproc_timers_info *timers = pdata->timers;
 #ifdef CONFIG_REMOTE_PROC_AUTOSUSPEND
 	struct omap_rproc_priv *rpp = rproc->priv;
 #endif
@@ -305,8 +352,7 @@ int omap_rproc_deactivate(struct omap_device *od)
 			goto err;
 	}
 
-	for (i = 0; i < pdata->timers_cnt; i++)
-		omap_dm_timer_stop(timers[i].odt);
+	omap_rproc_timers_stop(pdata);
 
 #ifdef CONFIG_REMOTE_PROC_AUTOSUSPEND
 	if (rpp->iommu) {
@@ -689,6 +735,7 @@ static struct rproc_ops omap_rproc_ops = {
 	.stop = omap_rproc_stop,
 #ifdef CONFIG_REMOTE_PROC_AUTOSUSPEND
 	.suspend = omap_suspend,
+	.resume = omap_resume,
 #endif
 	.iommu_init = omap_rproc_iommu_init,
 	.iommu_exit = omap_rproc_iommu_exit,
