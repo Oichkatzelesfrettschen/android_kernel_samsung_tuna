@@ -126,6 +126,10 @@ static struct page_info *alloc_largest_available(struct ion_system_heap *heap,
 			continue;
 
 		info = kmalloc(sizeof(struct page_info), GFP_KERNEL);
+		if (!info) {
+			free_buffer_page(heap, buffer, page, orders[i]);
+			return NULL;
+		}
 		info->page = page;
 		info->order = orders[i];
 		return info;
@@ -183,8 +187,9 @@ static int ion_system_heap_allocate(struct ion_heap *heap,
 err1:
 	kfree(table);
 err:
-	list_for_each_entry(info, &pages, list) {
+	list_for_each_entry_safe(info, tmp_info, &pages, list) {
 		free_buffer_page(sys_heap, buffer, info->page, info->order);
+		list_del(&info->list);
 		kfree(info);
 	}
 	return -ENOMEM;
