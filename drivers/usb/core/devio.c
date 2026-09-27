@@ -165,10 +165,10 @@ static ssize_t usbdev_read(struct file *file, char __user *buf, size_t nbytes,
 		struct usb_device_descriptor temp_desc;
 
 		memcpy(&temp_desc, &dev->descriptor, sizeof(dev->descriptor));
-		le16_to_cpus(&temp_desc.bcdUSB);
-		le16_to_cpus(&temp_desc.idVendor);
-		le16_to_cpus(&temp_desc.idProduct);
-		le16_to_cpus(&temp_desc.bcdDevice);
+		temp_desc.bcdUSB = (__force __le16)le16_to_cpu(temp_desc.bcdUSB);
+		temp_desc.idVendor = (__force __le16)le16_to_cpu(temp_desc.idVendor);
+		temp_desc.idProduct = (__force __le16)le16_to_cpu(temp_desc.idProduct);
+		temp_desc.bcdDevice = (__force __le16)le16_to_cpu(temp_desc.bcdDevice);
 
 		len = sizeof(struct usb_device_descriptor) - pos;
 		if (len > nbytes)

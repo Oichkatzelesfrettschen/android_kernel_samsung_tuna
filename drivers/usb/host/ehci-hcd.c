@@ -1337,7 +1337,7 @@ static int __init ehci_hcd_init(void)
 		printk(KERN_WARNING "Warning! ehci_hcd should always be loaded"
 				" before uhci_hcd and ohci_hcd, not after\n");
 
-	pr_debug("%s: block sizes: qh %Zd qtd %Zd itd %Zd sitd %Zd\n",
+	pr_debug("%s: block sizes: qh %zu qtd %zu itd %zu sitd %zu\n",
 		 hcd_name,
 		 sizeof(struct ehci_qh), sizeof(struct ehci_qtd),
 		 sizeof(struct ehci_itd), sizeof(struct ehci_sitd));
