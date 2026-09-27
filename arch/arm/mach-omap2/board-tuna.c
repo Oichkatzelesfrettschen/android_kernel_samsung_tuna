@@ -109,7 +109,7 @@ static struct gpio tuna_hw_rev_gpios[] = {
 	{170, GPIOF_IN, "hw_rev4"},
 };
 
-static const char const *omap4_tuna_hw_name_maguro[] = {
+static const char * const omap4_tuna_hw_name_maguro[] = {
 	[0x00] = "Toro Lunchbox #1",
 	[0x01] = "Maguro 1st Sample",
 	[0x02] = "Maguro 2nd Sample",
@@ -120,7 +120,7 @@ static const char const *omap4_tuna_hw_name_maguro[] = {
 	[0x09] = "Maguro 8th Sample",
 };
 
-static const char const *omap4_tuna_hw_name_toro[] = {
+static const char * const omap4_tuna_hw_name_toro[] = {
 	[0x00] = "Toro Lunchbox #2",
 	[0x01] = "Toro 1st Sample",
 	[0x02] = "Toro 2nd Sample",
@@ -146,7 +146,7 @@ int omap4_tuna_get_type(void)
 
 static const char *omap4_tuna_hw_rev_name(void) {
 	const char *ret;
-	const char **names;
+	const char * const *names;
 	int num;
 	int rev;
 

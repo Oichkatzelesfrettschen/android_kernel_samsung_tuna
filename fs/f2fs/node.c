@@ -705,6 +705,8 @@ restart:
 	ri = F2FS_INODE(page);
 	switch (level) {
 	case 0:
+		nofs = noffset[0];
+		break;
 	case 1:
 		nofs = noffset[1];
 		break;
