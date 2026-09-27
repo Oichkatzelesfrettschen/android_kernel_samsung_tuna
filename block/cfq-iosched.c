@@ -363,7 +363,15 @@ CFQ_CFQQ_FNS(fifo_expire);
 CFQ_CFQQ_FNS(idle_window);
 CFQ_CFQQ_FNS(prio_changed);
 CFQ_CFQQ_FNS(slice_new);
-CFQ_CFQQ_FNS(sync);
+static inline void cfq_mark_cfqq_sync(struct cfq_queue *cfqq)
+{
+	cfqq->flags |= (1 << CFQ_CFQQ_FLAG_sync);
+}
+
+static inline int cfq_cfqq_sync(const struct cfq_queue *cfqq)
+{
+	return (cfqq->flags & (1 << CFQ_CFQQ_FLAG_sync)) != 0;
+}
 CFQ_CFQQ_FNS(coop);
 CFQ_CFQQ_FNS(split_coop);
 CFQ_CFQQ_FNS(deep);
@@ -553,15 +561,6 @@ static inline u64 max_vdisktime(u64 min_vdisktime, u64 vdisktime)
 {
 	s64 delta = (s64)(vdisktime - min_vdisktime);
 	if (delta > 0)
-		min_vdisktime = vdisktime;
-
-	return min_vdisktime;
-}
-
-static inline u64 min_vdisktime(u64 min_vdisktime, u64 vdisktime)
-{
-	s64 delta = (s64)(vdisktime - min_vdisktime);
-	if (delta < 0)
 		min_vdisktime = vdisktime;
 
 	return min_vdisktime;

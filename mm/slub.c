@@ -1669,15 +1669,19 @@ static inline unsigned long next_tid(unsigned long tid)
 	return tid + TID_STEP;
 }
 
+#if defined(SLUB_DEBUG_CMPXCHG) && defined(CONFIG_PREEMPT)
 static inline unsigned int tid_to_cpu(unsigned long tid)
 {
 	return tid % TID_STEP;
 }
+#endif
 
+#ifdef SLUB_DEBUG_CMPXCHG
 static inline unsigned long tid_to_event(unsigned long tid)
 {
 	return tid / TID_STEP;
 }
+#endif
 
 static inline unsigned int init_tid(int cpu)
 {

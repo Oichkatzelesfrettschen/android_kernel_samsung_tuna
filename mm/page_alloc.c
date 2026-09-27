@@ -4414,14 +4414,10 @@ static inline void __init set_pageblock_order(unsigned int order)
 
 /*
  * When CONFIG_HUGETLB_PAGE_SIZE_VARIABLE is not set, set_pageblock_order()
- * and pageblock_default_order() are unused as pageblock_order is set
+ * is unused as pageblock_order is set
  * at compile-time. See include/linux/pageblock-flags.h for the values of
  * pageblock_order based on the kernel config
  */
-static inline int pageblock_default_order(unsigned int order)
-{
-	return MAX_ORDER-1;
-}
 #define set_pageblock_order(x)	do {} while (0)
 
 #endif /* CONFIG_HUGETLB_PAGE_SIZE_VARIABLE */

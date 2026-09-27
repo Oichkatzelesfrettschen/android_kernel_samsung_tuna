@@ -31,6 +31,7 @@
 #include <linux/vfs.h>
 #include <linux/moduleparam.h>
 #include <linux/bitmap.h>
+#include <asm/unaligned.h>
 
 #include "sysctl.h"
 #include "logfile.h"
@@ -563,13 +564,17 @@ static bool is_boot_sector_ntfs(const struct super_block *sb,
 	 * ignoring the checksum which leaves the checksum out-of-date.  We
 	 * report a warning if this is the case.
 	 */
-	if ((void*)b < (void*)&b->checksum && b->checksum && !silent) {
-		le32 *u;
+	if (get_unaligned_le32((const u8 *)b +
+			offsetof(NTFS_BOOT_SECTOR, checksum)) && !silent) {
+		size_t offset;
 		u32 i;
 
-		for (i = 0, u = (le32*)b; u < (le32*)(&b->checksum); ++u)
-			i += le32_to_cpup(u);
-		if (le32_to_cpu(b->checksum) != i)
+		for (i = 0, offset = 0;
+		     offset < offsetof(NTFS_BOOT_SECTOR, checksum);
+		     offset += sizeof(le32))
+			i += get_unaligned_le32((const u8 *)b + offset);
+		if (get_unaligned_le32((const u8 *)b +
+				offsetof(NTFS_BOOT_SECTOR, checksum)) != i)
 			ntfs_warning(sb, "Invalid boot sector checksum.");
 	}
 	/* Check OEMidentifier is "NTFS    " */

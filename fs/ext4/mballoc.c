@@ -2129,10 +2129,8 @@ static int ext4_mb_seq_groups_show(struct seq_file *seq, void *v)
 	int i;
 	int err;
 	struct ext4_buddy e4b;
-	struct sg {
-		struct ext4_group_info info;
-		ext4_grpblk_t counters[16];
-	} sg;
+	struct ext4_group_info *info;
+	size_t info_size;
 
 	group--;
 	if (group == 0)
@@ -2143,24 +2141,29 @@ static int ext4_mb_seq_groups_show(struct seq_file *seq, void *v)
 			   "2^0", "2^1", "2^2", "2^3", "2^4", "2^5", "2^6",
 			   "2^7", "2^8", "2^9", "2^10", "2^11", "2^12", "2^13");
 
-	i = (sb->s_blocksize_bits + 2) * sizeof(sg.info.bb_counters[0]) +
-		sizeof(struct ext4_group_info);
+	info_size = offsetof(struct ext4_group_info, bb_counters) +
+		(sb->s_blocksize_bits + 2) * sizeof(info->bb_counters[0]);
+	info = kmalloc(info_size, GFP_KERNEL);
+	if (!info)
+		return -ENOMEM;
 	err = ext4_mb_load_buddy(sb, group, &e4b);
 	if (err) {
 		seq_printf(seq, "#%-5u: I/O error\n", group);
+		kfree(info);
 		return 0;
 	}
 	ext4_lock_group(sb, group);
-	memcpy(&sg, ext4_get_group_info(sb, group), i);
+	memcpy(info, ext4_get_group_info(sb, group), info_size);
 	ext4_unlock_group(sb, group);
 	ext4_mb_unload_buddy(&e4b);
 
-	seq_printf(seq, "#%-5u: %-5u %-5u %-5u [", group, sg.info.bb_free,
-			sg.info.bb_fragments, sg.info.bb_first_free);
+	seq_printf(seq, "#%-5u: %-5u %-5u %-5u [", group, info->bb_free,
+			info->bb_fragments, info->bb_first_free);
 	for (i = 0; i <= 13; i++)
 		seq_printf(seq, " %-5u", i <= sb->s_blocksize_bits + 1 ?
-				sg.info.bb_counters[i] : 0);
+				info->bb_counters[i] : 0);
 	seq_printf(seq, " ]\n");
+	kfree(info);
 
 	return 0;
 }

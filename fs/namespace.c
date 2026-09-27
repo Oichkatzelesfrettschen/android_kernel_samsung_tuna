@@ -154,15 +154,6 @@ static inline void mnt_add_count(struct vfsmount *mnt, int n)
 #endif
 }
 
-static inline void mnt_set_count(struct vfsmount *mnt, int n)
-{
-#ifdef CONFIG_SMP
-	this_cpu_write(mnt->mnt_pcp->mnt_count, n);
-#else
-	mnt->mnt_count = n;
-#endif
-}
-
 /*
  * vfsmount lock must be held for read
  */
