@@ -908,6 +908,7 @@ static int hidp_setup_hid(struct hidp_session *session,
 				struct hidp_connadd_req *req)
 {
 	struct hid_device *hid;
+	size_t name_length;
 	int err;
 
 	session->rd_data = kzalloc(req->rd_size, GFP_KERNEL);
@@ -936,9 +937,14 @@ static int hidp_setup_hid(struct hidp_session *session,
 	hid->version = req->version;
 	hid->country = req->country;
 
-	strncpy(hid->name, req->name, sizeof(req->name) - 1);
-	strncpy(hid->phys, batostr(&bt_sk(session->ctrl_sock->sk)->src), 64);
-	strncpy(hid->uniq, batostr(&bt_sk(session->ctrl_sock->sk)->dst), 64);
+	name_length = strnlen(req->name, sizeof(req->name));
+	name_length = min(name_length, sizeof(hid->name) - 1);
+	memcpy(hid->name, req->name, name_length);
+	hid->name[name_length] = '\0';
+	strlcpy(hid->phys, batostr(&bt_sk(session->ctrl_sock->sk)->src),
+		sizeof(hid->phys));
+	strlcpy(hid->uniq, batostr(&bt_sk(session->ctrl_sock->sk)->dst),
+		sizeof(hid->uniq));
 
 	hid->dev.parent = hidp_get_device(session);
 	hid->ll_driver = &hidp_hid_driver;
