@@ -148,6 +148,12 @@ SECTIONS
 		*(.ARM.extab*)
 		__stop_unwind_tab = .;
 	}
+#else
+	/* Clang emits cantunwind entries even with unwind tables disabled. */
+	/DISCARD/ : {
+		*(.ARM.exidx*)
+		*(.ARM.extab*)
+	}
 #endif
 
 	_etext = .;			/* End of text and rodata section */
