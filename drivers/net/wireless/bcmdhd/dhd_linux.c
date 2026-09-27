@@ -5451,7 +5451,6 @@ int net_os_rxfilter_add_remove(struct net_device *dev, int add_remove, int num)
 {
 	dhd_info_t *dhd = *(dhd_info_t **)netdev_priv(dev);
 	char *filterp = NULL;
-	int filter_id = 0;
 	int ret = 0;
 
 	if (!dhd || (num == DHD_UNICAST_FILTER_NUM) ||
@@ -5462,15 +5461,12 @@ int net_os_rxfilter_add_remove(struct net_device *dev, int add_remove, int num)
 	switch (num) {
 		case DHD_BROADCAST_FILTER_NUM:
 			filterp = "101 0 0 0 0xFFFFFFFFFFFF 0xFFFFFFFFFFFF";
-			filter_id = 101;
 			break;
 		case DHD_MULTICAST4_FILTER_NUM:
 			filterp = "102 0 0 0 0xFFFFFF 0x01005E";
-			filter_id = 102;
 			break;
 		case DHD_MULTICAST6_FILTER_NUM:
 			filterp = "103 0 0 0 0xFFFF 0x3333";
-			filter_id = 103;
 			break;
 		default:
 			return -EINVAL;
@@ -5482,7 +5478,7 @@ int net_os_rxfilter_add_remove(struct net_device *dev, int add_remove, int num)
 		dhd_pktfilter_offload_set(&dhd->pub, dhd->pub.pktfilter[num]);
 	} else { /* Delete filter */
 		dhd->pub.pktfilter[num] = NULL;
-		dhd_pktfilter_offload_delete(&dhd->pub, filter_id);
+		/* dhd_pktfilter_offload_delete(&dhd->pub, filter_id); */
 	}
 	return ret;
 }
