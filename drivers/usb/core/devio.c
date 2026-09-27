@@ -995,7 +995,7 @@ static int proc_getdriver(struct dev_state *ps, void __user *arg)
 	if (!intf || !intf->dev.driver)
 		ret = -ENODATA;
 	else {
-		strncpy(gd.driver, intf->dev.driver->name,
+		strlcpy(gd.driver, intf->dev.driver->name,
 				sizeof(gd.driver));
 		ret = (copy_to_user(arg, &gd, sizeof(gd)) ? -EFAULT : 0);
 	}
@@ -1137,18 +1137,18 @@ static int proc_do_submiturb(struct dev_state *ps, struct usbdevfs_urb *uurb,
 			kfree(dr);
 			return -EFAULT;
 		}
-		if (uurb->buffer_length < (le16_to_cpup(&dr->wLength) + 8)) {
+		if (uurb->buffer_length < (le16_to_cpu(dr->wLength) + 8)) {
 			kfree(dr);
 			return -EINVAL;
 		}
 		ret = check_ctrlrecip(ps, dr->bRequestType, dr->bRequest,
-				      le16_to_cpup(&dr->wIndex));
+					      le16_to_cpu(dr->wIndex));
 		if (ret) {
 			kfree(dr);
 			return ret;
 		}
 		uurb->number_of_packets = 0;
-		uurb->buffer_length = le16_to_cpup(&dr->wLength);
+		uurb->buffer_length = le16_to_cpu(dr->wLength);
 		uurb->buffer += 8;
 		if ((dr->bRequestType & USB_DIR_IN) && uurb->buffer_length) {
 			is_in = 1;
@@ -1161,9 +1161,9 @@ static int proc_do_submiturb(struct dev_state *ps, struct usbdevfs_urb *uurb,
 			"bRequest=%02x wValue=%04x "
 			"wIndex=%04x wLength=%04x\n",
 			dr->bRequestType, dr->bRequest,
-			__le16_to_cpup(&dr->wValue),
-			__le16_to_cpup(&dr->wIndex),
-			__le16_to_cpup(&dr->wLength));
+			le16_to_cpu(dr->wValue),
+			le16_to_cpu(dr->wIndex),
+			le16_to_cpu(dr->wLength));
 		break;
 
 	case USBDEVFS_URB_TYPE_BULK:
