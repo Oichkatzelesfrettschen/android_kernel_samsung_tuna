@@ -1547,7 +1547,7 @@ wl_cfg80211_notify_ifadd(struct net_device *ndev, s32 idx, s32 bssidx,
 		WL_DBG(("IF_ADD event called from dongle, old interface name: %s,"
 			"new name: %s\n", ndev->name, wl->p2p->vir_ifname));
 		/* Assign the net device to CONNECT BSSCFG */
-		strncpy(ndev->name, wl->p2p->vir_ifname, IFNAMSIZ - 1);
+		strlcpy(ndev->name, wl->p2p->vir_ifname, IFNAMSIZ);
 		wl_to_p2p_bss_ndev(wl, P2PAPI_BSSCFG_CONNECTION) = ndev;
 		wl_to_p2p_bss_bssidx(wl, P2PAPI_BSSCFG_CONNECTION) = bssidx;
 		wl_to_p2p_bss_private(wl, P2PAPI_BSSCFG_CONNECTION) = _net_attach;
@@ -2635,8 +2635,7 @@ wl_cfg80211_ibss_vsie_delete(struct net_device *dev)
 		}
 
 		/* change the command from "add" to "del" */
-		strncpy(wl->ibss_vsie->cmd, "del", VNDR_IE_CMD_LEN - 1);
-		wl->ibss_vsie->cmd[VNDR_IE_CMD_LEN - 1] = '\0';
+		memcpy(wl->ibss_vsie->cmd, "del", sizeof("del"));
 
 		ret = wldev_iovar_setbuf(dev, "ie",
 			wl->ibss_vsie, wl->ibss_vsie_len,
@@ -5058,7 +5057,7 @@ wl_cfg80211_mgmt_tx(struct wiphy *wiphy, bcm_struct_cfgdev *cfgdev,
 			s32 ie_len = len - ie_offset;
 			if (dev == wl_to_prmry_ndev(wl))
 				bssidx = wl_to_p2p_bss_bssidx(wl, P2PAPI_BSSCFG_DEVICE);
-				wl_cfgp2p_set_management_ie(wl, dev, bssidx,
+			wl_cfgp2p_set_management_ie(wl, dev, bssidx,
 				VNDR_IE_PRBRSP_FLAG, (u8 *)(buf + ie_offset), ie_len);
 			cfg80211_mgmt_tx_status(cfgdev, *cookie, buf, len, true, GFP_KERNEL);
 			goto exit;

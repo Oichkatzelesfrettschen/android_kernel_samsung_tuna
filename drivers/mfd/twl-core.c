@@ -852,8 +852,8 @@ add_children(struct twl4030_platform_data *pdata, unsigned long features,
 			child = add_regulator(TWL6030_REG_VUSB,
 						pdata->vusb, features);
 
-			if (IS_ERR(child))
-					return PTR_ERR(child);
+		if (IS_ERR(child))
+			return PTR_ERR(child);
 	}
 
 	if (twl_has_watchdog() && twl_class_is_4030()) {

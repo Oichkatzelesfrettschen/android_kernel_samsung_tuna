@@ -491,8 +491,8 @@ static ssize_t ffs_ep0_write(struct file *file, const char __user *buf,
 			ret = functionfs_ready_callback(ffs);
 			if (unlikely(ret < 0)) {
 				ffs->state = FFS_CLOSING;
-				return ret;
-			}
+			return ret;
+		}
 
 			set_bit(FFS_FL_CALL_CLOSED_CALLBACK, &ffs->flags);
 			return len;
