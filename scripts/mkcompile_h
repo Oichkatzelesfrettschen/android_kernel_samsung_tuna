@@ -64,6 +64,14 @@ UTS_VERSION="$UTS_VERSION $CONFIG_FLAGS $TIMESTAMP"
 UTS_LEN=64
 UTS_TRUNCATE="cut -b -$UTS_LEN"
 
+# Clang reports compile-only flags as unused for -v with no input.
+# --version prints its version without treating those flags as a diagnostic.
+COMPILER_VERSION=`$CC --version 2>&1 | head -n 1`
+case "$COMPILER_VERSION" in
+  clang\ version*) ;;
+  *) COMPILER_VERSION=`$CC -v 2>&1 | tail -n 1` ;;
+esac
+
 # Generate a temporary compile.h
 
 ( echo /\* This file is auto generated, version $VERSION \*/
@@ -76,7 +84,7 @@ UTS_TRUNCATE="cut -b -$UTS_LEN"
   echo \#define LINUX_COMPILE_BY \"`echo $LINUX_COMPILE_BY | $UTS_TRUNCATE`\"
   echo \#define LINUX_COMPILE_HOST \"`echo $LINUX_COMPILE_HOST | $UTS_TRUNCATE`\"
 
-  echo \#define LINUX_COMPILER \"`$CC -v 2>&1 | tail -n 1`\"
+  echo \#define LINUX_COMPILER \"$COMPILER_VERSION\"
 ) > .tmpcompile
 
 # Only replace the real compile.h if the new one is different,
