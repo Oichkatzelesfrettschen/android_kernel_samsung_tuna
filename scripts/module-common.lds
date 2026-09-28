@@ -14,7 +14,9 @@ SECTIONS {
 	.ARM.exidx.exit.text	: { *(.ARM.exidx.exit.text) }
 	.rodata			: { *(.rodata) }
 	.data			: { *(.data) }
+	.sdata			: { *(.sdata) }
 	.bss			: { *(.bss) }
+	.sbss			: { *(.sbss) }
 	__param			: { *(__param) }
 	.modinfo		: { *(.modinfo) }
 	.gnu.linkonce.this_module : { *(.gnu.linkonce.this_module) }

@@ -372,7 +372,8 @@ LLVM_NM := $(LLVM_PREFIX)llvm-nm$(LLVM_SUFFIX)
 LLVM_STRIP := $(LLVM_PREFIX)llvm-strip$(LLVM_SUFFIX)
 LLVM_OBJCOPY := $(LLVM_PREFIX)llvm-objcopy$(LLVM_SUFFIX)
 LLVM_OBJDUMP := $(LLVM_PREFIX)llvm-objdump$(LLVM_SUFFIX)
-$(foreach tool,$(LLVM_CC) $(LLVM_LD) $(LLVM_AR) $(LLVM_NM) $(LLVM_STRIP) $(LLVM_OBJCOPY) $(LLVM_OBJDUMP),$(if $(shell command -v $(tool) 2>/dev/null),,$(error LLVM tool missing: $(tool))))
+LLVM_READELF := $(LLVM_PREFIX)llvm-readelf$(LLVM_SUFFIX)
+$(foreach tool,$(LLVM_CC) $(LLVM_LD) $(LLVM_AR) $(LLVM_NM) $(LLVM_STRIP) $(LLVM_OBJCOPY) $(LLVM_OBJDUMP) $(LLVM_READELF),$(if $(shell command -v $(tool) 2>/dev/null),,$(error LLVM tool missing: $(tool))))
 ifneq ($(shell $(LLVM_CC) -dM -E -x c /dev/null 2>/dev/null | grep '^.define __clang__ 1$$'),)
 else
 $(error LLVM compiler is not Clang: $(LLVM_CC))
@@ -406,6 +407,7 @@ override NM := $(LLVM_NM)
 override STRIP := $(LLVM_STRIP)
 override OBJCOPY := $(LLVM_OBJCOPY)
 override OBJDUMP := $(LLVM_OBJDUMP)
+override READELF := $(LLVM_READELF)
 else
 AS		= $(CROSS_COMPILE)as
 LD		= $(CROSS_COMPILE)ld
@@ -415,6 +417,7 @@ NM		= $(CROSS_COMPILE)nm
 STRIP		= $(CROSS_COMPILE)strip
 OBJCOPY		= $(CROSS_COMPILE)objcopy
 OBJDUMP		= $(CROSS_COMPILE)objdump
+READELF		= $(CROSS_COMPILE)readelf
 endif
 CPP		= $(CC) -E
 AWK		= awk
@@ -465,7 +468,7 @@ KERNELVERSION = $(VERSION)$(if $(PATCHLEVEL),.$(PATCHLEVEL)$(if $(SUBLEVEL),.$(S
 
 export VERSION PATCHLEVEL SUBLEVEL KERNELRELEASE KERNELVERSION
 export ARCH SRCARCH CONFIG_SHELL HOSTCC HOSTCFLAGS CROSS_COMPILE AS LD CC
-export CPP AR NM STRIP OBJCOPY OBJDUMP
+export CPP AR NM STRIP OBJCOPY OBJDUMP READELF
 export MAKE AWK GENKSYMS INSTALLKERNEL PERL UTS_MACHINE
 export HOSTCXX HOSTCXXFLAGS LDFLAGS_MODULE CHECK CHECKFLAGS
 

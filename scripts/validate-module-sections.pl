@@ -19,8 +19,13 @@ sub readelf_output {
 
 my $header = readelf_output('-h');
 $header =~ /^\s*Class:\s+ELF32\s*$/m or die "$module: expected ELF32\n";
+$header =~ /^\s*Data:\s+2's complement, little endian\s*$/m
+	or die "$module: expected little-endian ELF\n";
 $header =~ /^\s*Type:\s+REL\s/m or die "$module: expected relocatable ELF\n";
 $header =~ /^\s*Machine:\s+ARM\s*$/m or die "$module: expected ARM ELF\n";
+my ($elf_flags) = $header =~ /^\s*Flags:\s+(0x[0-9a-fA-F]+)/m;
+defined($elf_flags) && (hex($elf_flags) & 0xff000000) == 0x05000000
+	or die "$module: expected ARM EABI5 ELF\n";
 
 my $section_table = readelf_output('-SW');
 my ($section_count) = $section_table =~ /^There are (\d+) section headers/m;
@@ -81,7 +86,7 @@ for my $section (@sections) {
 	} elsif ($name =~ /^\.(?:text|init\.text|exit\.text|ref\.text)(?:\..+)?$/) {
 		check_section($section, 'PROGBITS', 'AX', 'W');
 	} elsif ($name =~ /^\.(?:data|init\.data|exit\.data|ref\.data|sdata|bss|sbss)(?:\..+)?$/) {
-		check_section($section, $name =~ /(?:^|\.)bss/ ? 'NOBITS' : 'PROGBITS', 'WA', 'X');
+		check_section($section, $name =~ /^\.(?:s?bss)(?:\.|$)/ ? 'NOBITS' : 'PROGBITS', 'WA', 'X');
 	} elsif ($name eq '.gnu.linkonce.this_module') {
 		check_section($section, 'PROGBITS', 'WA', 'X');
 	} elsif ($name =~ /^(?:\.rodata|\.init\.rodata|\.exit\.rodata|\.ARM\.extab|\.modinfo|__versions|__param|__ksymtab\w*|__kcrctab\w*|__bug_table)(?:\..+)?$/) {
