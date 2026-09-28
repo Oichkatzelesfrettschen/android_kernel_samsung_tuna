@@ -197,6 +197,7 @@ struct smk_audit_info {
 #ifdef CONFIG_AUDIT
 	struct common_audit_data a;
 	struct smack_audit_data sad;
+	struct lsm_network_audit net;
 #endif
 };
 /*
@@ -317,6 +318,8 @@ static inline void smk_ad_init(struct smk_audit_info *a, const char *func,
 	a->a.type = type;
 	a->a.smack_audit_data = &a->sad;
 	a->a.smack_audit_data->function = func;
+	if (type == LSM_AUDIT_DATA_NET)
+		a->a.u.net = &a->net;
 }
 
 static inline void smk_ad_setfield_u_tsk(struct smk_audit_info *a,
@@ -342,7 +345,7 @@ static inline void smk_ad_setfield_u_fs_path(struct smk_audit_info *a,
 static inline void smk_ad_setfield_u_net_sk(struct smk_audit_info *a,
 					    struct sock *sk)
 {
-	a->a.u.net.sk = sk;
+	a->a.u.net->sk = sk;
 }
 
 #else /* no AUDIT */
