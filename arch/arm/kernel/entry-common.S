@@ -467,7 +467,11 @@ __sys_trace:
 	mov	scno, r0			@ syscall number (possibly new)
 	add	r1, sp, #S_R0 + S_OFF		@ pointer to regs
 	cmp	scno, #NR_syscalls		@ check upper syscall limit
+#ifdef __clang__
+	ldmiacc	r1, {r0 - r3}			@ have to reload r0 - r3
+#else
 	ldmccia	r1, {r0 - r3}			@ have to reload r0 - r3
+#endif
 	ldrcc	pc, [tbl, scno, lsl #2]		@ call sys_* routine
 	b	2b
 
@@ -513,7 +517,11 @@ sys_syscall:
 		bic	scno, r0, #__NR_OABI_SYSCALL_BASE
 		cmp	scno, #__NR_syscall - __NR_SYSCALL_BASE
 		cmpne	scno, #NR_syscalls	@ check range
+#ifdef __clang__
+		stmialo	sp, {r5, r6}		@ shuffle args
+#else
 		stmloia	sp, {r5, r6}		@ shuffle args
+#endif
 		movlo	r0, r1
 		movlo	r1, r2
 		movlo	r2, r3
@@ -639,4 +647,3 @@ ENTRY(sys_oabi_call_table)
 #undef OBSOLETE
 
 #endif
-

@@ -480,7 +480,11 @@ __und_usr:
 	itet	eq				@ explicit IT needed for the 1f label
 	subeq	r4, r2, #4			@ ARM instr at LR - 4
 	subne	r4, r2, #2			@ Thumb instr at LR - 2
+#ifdef __clang__
+1:	ldrteq	r0, [r4]
+#else
 1:	ldreqt	r0, [r4]
+#endif
 #ifdef CONFIG_CPU_ENDIAN_BE8
 	reveq	r0, r0				@ little endian instruction
 #endif
@@ -494,7 +498,7 @@ __und_usr:
 	and	r0, r5, #0xf800			@ mask bits 111x x... .... ....
 	cmp	r0, #0xe800			@ 32bit instruction if xx != 0
 	blo	__und_usr_unknown
-3:	ldrht	r0, [r4]
+3:	ldrht	r0, [r4], #0
 	add	r2, r2, #2			@ r2 is PC + 2, make it PC + 4
 	orr    	r0, r0, r5, lsl #16
 #else

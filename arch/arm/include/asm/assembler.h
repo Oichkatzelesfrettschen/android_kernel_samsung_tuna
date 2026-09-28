@@ -180,10 +180,9 @@
 	.endif							;\
 	.popsection
 #define ALT_UP_B(label)					\
-	.equ	up_b_offset, label - 9998b			;\
 	.pushsection ".alt.smp.init", "a"			;\
 	.long	9998b						;\
-	W(b)	. + up_b_offset					;\
+	W(b)	. + (label - 9998b)				;\
 	.popsection
 #else
 #define ALT_SMP(instr...)
@@ -275,7 +274,11 @@
 	.rept	\rept
 9999:
 	.if	\inc == 1
+#ifdef __clang__
+	\instr\()b\cond\()\t \reg, [\ptr], #\inc
+#else
 	\instr\cond\()b\()\t \reg, [\ptr], #\inc
+#endif
 	.elseif	\inc == 4
 	\instr\cond\()\t \reg, [\ptr], #\inc
 	.else
