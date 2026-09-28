@@ -129,7 +129,11 @@ THUMB(	mov	lr, r3			)
 THUMB(	bx	r4			)
 #else
 	@ load v:p, stack, return fn
+#if defined(__clang__) && !defined(CONFIG_THUMB2_KERNEL)
+	.inst	0xe8b06002			@ LDMIA r0!, {r1, sp, lr}
+#else
   ARM(	ldmia	r0!, {r1, sp, lr}	)
+#endif
 THUMB(	ldmia	r0!, {r1, r2, lr}	)
 THUMB(	mov	sp, r2			)
 	b	cpu_do_resume

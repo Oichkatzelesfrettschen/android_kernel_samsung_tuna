@@ -43,7 +43,12 @@ ENDPROC(c_backtrace)
  THUMB(		orreq	mask, #0x03		)
 		movne	mask, #0		@ mask for 32-bit
 
-1:		stmfd	sp!, {pc}		@ calculate offset of PC stored
+1:
+#if defined(__clang__) && !defined(CONFIG_THUMB2_KERNEL)
+		.inst	0xe92d8000	@ STMFD sp!, {pc}
+#else
+		stmfd	sp!, {pc}		@ calculate offset of PC stored
+#endif
 		ldr	r0, [sp], #4		@ by stmfd for this CPU
 		adr	r1, 1b
 		sub	offset, r0, r1

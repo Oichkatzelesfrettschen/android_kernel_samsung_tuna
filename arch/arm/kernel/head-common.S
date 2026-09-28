@@ -92,7 +92,11 @@ __mmap_switched:
 	strcc	fp, [r6],#4
 	bcc	1b
 
+#if defined(__clang__) && !defined(CONFIG_THUMB2_KERNEL)
+	.inst	0xe89320f0			@ LDMIA r3, {r4-r7, sp}
+#else
  ARM(	ldmia	r3, {r4, r5, r6, r7, sp})
+#endif
  THUMB(	ldmia	r3, {r4, r5, r6, r7}	)
  THUMB(	ldr	sp, [r3, #16]		)
 	str	r9, [r4]			@ Save processor ID

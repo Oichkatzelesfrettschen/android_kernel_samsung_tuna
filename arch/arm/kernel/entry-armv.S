@@ -55,7 +55,11 @@
  */
 	.macro	inv_entry, reason
 	sub	sp, sp, #S_FRAME_SIZE
+#if defined(__clang__) && !defined(CONFIG_THUMB2_KERNEL)
+	.inst	0xe98d7ffe			@ STMIB sp, {r1-lr}
+#else
  ARM(	stmib	sp, {r1 - lr}		)
+#endif
  THUMB(	stmia	sp, {r0 - r12}		)
  THUMB(	str	sp, [sp, #S_SP]		)
  THUMB(	str	lr, [sp, #S_LR]		)
@@ -724,7 +728,11 @@ ENTRY(__switch_to)
  UNWIND(.cantunwind	)
 	add	ip, r1, #TI_CPU_SAVE
 	ldr	r3, [r2, #TI_TP_VALUE]
+#if defined(__clang__) && !defined(CONFIG_THUMB2_KERNEL)
+	.inst	0xe8ac6ff0			@ STMIA ip!, {r4-sl, fp, sp, lr}
+#else
  ARM(	stmia	ip!, {r4 - sl, fp, sp, lr} )	@ Store most regs on stack
+#endif
  THUMB(	stmia	ip!, {r4 - sl, fp}	   )	@ Store most regs on stack
  THUMB(	str	sp, [ip], #4		   )
  THUMB(	str	lr, [ip], #4		   )
@@ -750,7 +758,11 @@ ENTRY(__switch_to)
 #endif
  THUMB(	mov	ip, r4			   )
 	mov	r0, r5
+#if defined(__clang__) && !defined(CONFIG_THUMB2_KERNEL)
+	.inst	0xe894aff0			@ LDMIA r4, {r4-sl, fp, sp, pc}
+#else
  ARM(	ldmia	r4, {r4 - sl, fp, sp, pc}  )	@ Load all regs saved previously
+#endif
  THUMB(	ldmia	ip!, {r4 - sl, fp}	   )	@ Load all regs saved previously
  THUMB(	ldr	sp, [ip], #4		   )
  THUMB(	ldr	pc, [ip]		   )
