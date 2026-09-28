@@ -127,22 +127,22 @@ int __init register_security(struct security_operations *ops)
 
 /* Security operations */
 
-int security_binder_set_context_mgr(struct task_struct *mgr)
+int security_binder_set_context_mgr(const struct cred *mgr)
 {
 	return security_ops->binder_set_context_mgr(mgr);
 }
 
-int security_binder_transaction(struct task_struct *from, struct task_struct *to)
+int security_binder_transaction(const struct cred *from, const struct cred *to)
 {
 	return security_ops->binder_transaction(from, to);
 }
 
-int security_binder_transfer_binder(struct task_struct *from, struct task_struct *to)
+int security_binder_transfer_binder(const struct cred *from, const struct cred *to)
 {
 	return security_ops->binder_transfer_binder(from, to);
 }
 
-int security_binder_transfer_file(struct task_struct *from, struct task_struct *to, struct file *file)
+int security_binder_transfer_file(const struct cred *from, const struct cred *to, struct file *file)
 {
 	return security_ops->binder_transfer_file(from, to, file);
 }
@@ -796,6 +796,12 @@ void security_task_getsecid(struct task_struct *p, u32 *secid)
 	security_ops->task_getsecid(p, secid);
 }
 EXPORT_SYMBOL(security_task_getsecid);
+
+void security_cred_getsecid(const struct cred *cred, u32 *secid)
+{
+	security_ops->cred_getsecid(cred, secid);
+}
+EXPORT_SYMBOL(security_cred_getsecid);
 
 int security_task_setnice(struct task_struct *p, int nice)
 {

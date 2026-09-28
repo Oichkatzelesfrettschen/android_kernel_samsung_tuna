@@ -1514,6 +1514,11 @@ static void smack_task_getsecid(struct task_struct *p, u32 *secid)
 	*secid = smack_to_secid(smk_of_task(task_security(p)));
 }
 
+static void smack_cred_getsecid(const struct cred *cred, u32 *secid)
+{
+	*secid = smack_to_secid(smk_of_task(cred->security));
+}
+
 /**
  * smack_task_setnice - Smack check on setting nice
  * @p: the task object
@@ -3450,6 +3455,7 @@ struct security_operations smack_ops = {
 	.task_getpgid = 		smack_task_getpgid,
 	.task_getsid = 			smack_task_getsid,
 	.task_getsecid = 		smack_task_getsecid,
+	.cred_getsecid =		smack_cred_getsecid,
 	.task_setnice = 		smack_task_setnice,
 	.task_setioprio = 		smack_task_setioprio,
 	.task_getioprio = 		smack_task_getioprio,
