@@ -7,7 +7,9 @@
 # ccflags-y := -DDEBUG
 # asflags-y := -DDEBUG
 
+ifneq ($(LLVM_IAS),1)
 KBUILD_AFLAGS	:=$(KBUILD_AFLAGS:-msoft-float=-Wa,-mfpu=softvfp+vfp)
+endif
 LDFLAGS		+=--no-warn-mismatch
 
 obj-y			+= vfp.o

@@ -18,6 +18,8 @@
 #include <asm/vfpmacros.h>
 #include "../kernel/entry-header.S"
 
+	.fpu	vfpv3
+
 	.macro	DBGSTR, str
 #ifdef DEBUG
 	stmfd	sp!, {r0-r3, ip, lr}
@@ -222,6 +224,13 @@ vfp_current_hw_state_address:
 
 ENTRY(vfp_get_float)
 	tbl_branch r0, r3, #3
+#ifdef __clang__
+	.irp	sr,0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31
+1:	vmov	r0, s\sr
+	mov	pc, lr
+	.org	1b + 8
+	.endr
+#else
 	.irp	dr,0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15
 1:	mrc	p10, 0, r0, c\dr, c0, 0	@ fmrs	r0, s0
 	mov	pc, lr
@@ -230,10 +239,18 @@ ENTRY(vfp_get_float)
 	mov	pc, lr
 	.org	1b + 8
 	.endr
+#endif
 ENDPROC(vfp_get_float)
 
 ENTRY(vfp_put_float)
 	tbl_branch r1, r3, #3
+#ifdef __clang__
+	.irp	sr,0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31
+1:	vmov	s\sr, r0
+	mov	pc, lr
+	.org	1b + 8
+	.endr
+#else
 	.irp	dr,0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15
 1:	mcr	p10, 0, r0, c\dr, c0, 0	@ fmsr	r0, s0
 	mov	pc, lr
@@ -242,6 +259,7 @@ ENTRY(vfp_put_float)
 	mov	pc, lr
 	.org	1b + 8
 	.endr
+#endif
 ENDPROC(vfp_put_float)
 
 ENTRY(vfp_get_double)
@@ -253,11 +271,19 @@ ENTRY(vfp_get_double)
 	.endr
 #ifdef CONFIG_VFPv3
 	@ d16 - d31 registers
+#ifdef __clang__
+	.irp	dr,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31
+1:	vmov	r0, r1, d\dr
+	mov	pc, lr
+	.org	1b + 8
+	.endr
+#else
 	.irp	dr,0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15
 1:	mrrc	p11, 3, r0, r1, c\dr	@ fmrrd	r0, r1, d\dr
 	mov	pc, lr
 	.org	1b + 8
 	.endr
+#endif
 #endif
 
 	@ virtual register 16 (or 32 if VFPv3) for compare with zero
@@ -275,10 +301,18 @@ ENTRY(vfp_put_double)
 	.endr
 #ifdef CONFIG_VFPv3
 	@ d16 - d31 registers
+#ifdef __clang__
+	.irp	dr,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31
+1:	vmov	d\dr, r0, r1
+	mov	pc, lr
+	.org	1b + 8
+	.endr
+#else
 	.irp	dr,0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15
 1:	mcrr	p11, 3, r0, r1, c\dr	@ fmdrr	r0, r1, d\dr
 	mov	pc, lr
 	.org	1b + 8
 	.endr
+#endif
 #endif
 ENDPROC(vfp_put_double)
