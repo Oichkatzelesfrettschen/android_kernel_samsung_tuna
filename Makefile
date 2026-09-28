@@ -329,6 +329,17 @@ include $(srctree)/scripts/Kbuild.include
 # Make variables (CC, etc...)
 
 ifneq ($(LLVM),)
+# Tool names enter shell-based Kbuild probes. Keep their inputs to literal
+# path and target characters before any tool lookup or compiler invocation.
+export LLVM CROSS_COMPILE CLANG_TRIPLE
+LLVM_INPUT_ERROR := $(shell \
+	printf '%s' "$$LLVM" | LC_ALL=C tr -d 'A-Za-z0-9_./+-' | od -An -tx1 | grep -q . && printf 'LLVM '; \
+	printf '%s' "$$CROSS_COMPILE" | LC_ALL=C tr -d 'A-Za-z0-9_./+-' | od -An -tx1 | grep -q . && printf 'CROSS_COMPILE '; \
+	printf '%s' "$$CLANG_TRIPLE" | LC_ALL=C tr -d 'A-Za-z0-9_./+-' | od -An -tx1 | grep -q . && printf 'CLANG_TRIPLE')
+ifneq ($(LLVM_INPUT_ERROR),)
+$(error Unsafe tool name characters in $(strip $(LLVM_INPUT_ERROR)))
+endif
+
 ifeq ($(LLVM),1)
 LLVM_PREFIX :=
 else ifneq ($(filter /%,$(LLVM)),)

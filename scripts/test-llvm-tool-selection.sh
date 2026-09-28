@@ -14,8 +14,10 @@ case "$llvm_bin" in
 esac
 
 test_dir=$(mktemp -d)
-trap 'find "$test_dir" -type l -delete; rm -f "$database"; rmdir "$test_dir"' EXIT HUP INT TERM
+trap 'find "$test_dir" -type l -delete; rm -f "$database" "$error_file"; rmdir "$test_dir"' EXIT HUP INT TERM
 database=$test_dir/database
+error_file=$test_dir/error
+sentinel=$test_dir/unsafe-command-ran
 
 read_tools()
 {
@@ -34,6 +36,24 @@ reject_tool()
 {
 	if grep -F -q -- "$1" "$database"; then
 		echo "unexpected selected tool: $1" >&2
+		exit 1
+	fi
+}
+
+reject_unsafe_input()
+{
+	expected_name=$1
+	shift
+	if read_tools "$@" 2> "$error_file"; then
+		echo "unsafe $expected_name input passed" >&2
+		exit 1
+	fi
+	if ! grep -F -q "Unsafe tool name characters in $expected_name" "$error_file"; then
+		cat "$error_file" >&2
+		exit 1
+	fi
+	if [ -e "$sentinel" ]; then
+		echo "unsafe command executed" >&2
 		exit 1
 	fi
 }
@@ -97,5 +117,15 @@ if read_tools "LLVM=$llvm_bin" LLVM_IAS=invalid 2>/dev/null; then
 	echo "invalid LLVM_IAS value passed" >&2
 	exit 1
 fi
+
+reject_unsafe_input LLVM "LLVM=${llvm_bin}with space/"
+reject_unsafe_input LLVM "LLVM=${llvm_bin}'"
+reject_unsafe_input LLVM "LLVM=${llvm_bin};touch $sentinel;#"
+reject_unsafe_input CROSS_COMPILE "LLVM=$llvm_bin" \
+	"CROSS_COMPILE=${cross_prefix};touch $sentinel;#"
+reject_unsafe_input CLANG_TRIPLE "LLVM=$llvm_bin" \
+	"CLANG_TRIPLE=arm-linux-gnu-;touch $sentinel;#"
+newline=$(printf '\nx')
+reject_unsafe_input LLVM "LLVM=${llvm_bin}${newline}"
 
 echo "LLVM tool selection passed"
