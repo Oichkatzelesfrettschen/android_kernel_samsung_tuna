@@ -510,6 +510,8 @@ mark_source_chains(const struct xt_table_info *newinfo,
 
 				/* Move along one */
 				size = e->next_offset;
+				if (size >= newinfo->size - pos)
+					return 0;
 				e = (struct ipt_entry *)
 					(entry0 + pos + size);
 				e->counters.pcnt = pos;
@@ -532,6 +534,8 @@ mark_source_chains(const struct xt_table_info *newinfo,
 						 pos, newpos);
 				} else {
 					/* ... this is a fallthru */
+					if (e->next_offset >= newinfo->size - pos)
+						return 0;
 					newpos = pos + e->next_offset;
 				}
 				e = (struct ipt_entry *)
