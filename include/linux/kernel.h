@@ -469,11 +469,11 @@ do {									\
 do {									\
 	__trace_printk_check_format(fmt, ##args);			\
 	if (__builtin_constant_p(fmt)) {				\
-		static const char *trace_printk_fmt			\
+		static const char *trace_printk_fmt __used		\
 		  __attribute__((section("__trace_printk_fmt"))) =	\
 			__builtin_constant_p(fmt) ? fmt : NULL;		\
 									\
-		__trace_bprintk(_THIS_IP_, trace_printk_fmt, ##args);	\
+		__trace_bprintk(_THIS_IP_, fmt, ##args);		\
 	} else								\
 		__trace_printk(_THIS_IP_, fmt, ##args);		\
 } while (0)
