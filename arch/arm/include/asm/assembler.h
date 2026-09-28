@@ -50,6 +50,34 @@
 #define put_byte_3      lsl #0
 #endif
 
+/* GCC's divided ARM syntax places the condition before the width suffix. */
+#ifdef __clang__
+#define ldrneb ldrbne
+#define ldrneh ldrhne
+#define ldrgeb ldrbge
+#define ldrgtb ldrbgt
+#define strneb strbne
+#define strltb strblt
+#define strleb strble
+#define strgeb strbge
+#define strgtb strbgt
+#define strneh strhne
+#define ldrccb ldrbcc
+#define ldrcsb ldrbcs
+#define strcsb strbcs
+#define ldmeqfd ldmiaeq
+#define ldmcsia ldmiacs
+#define stmcsia stmiacs
+#define stmgeia stmiage
+#define stmneia stmiane
+#define stmmiia stmiami
+#define adcnes adcsne
+#define subcss subscs
+#define subges subsge
+#define movnes movsne
+#define sbcccs sbcscc
+#endif
+
 /*
  * Data preload for architectures that support it
  */

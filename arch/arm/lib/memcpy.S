@@ -29,7 +29,11 @@
 	.endm
 
 	.macro ldr1b ptr reg cond=al abort
+#ifdef __clang__
+	ldrb\cond \reg, [\ptr], #1
+#else
 	ldr\cond\()b \reg, [\ptr], #1
+#endif
 	.endm
 
 	.macro str1w ptr reg abort
@@ -41,7 +45,11 @@
 	.endm
 
 	.macro str1b ptr reg cond=al abort
+#ifdef __clang__
+	strb\cond \reg, [\ptr], #1
+#else
 	str\cond\()b \reg, [\ptr], #1
+#endif
 	.endm
 
 	.macro enter reg1 reg2

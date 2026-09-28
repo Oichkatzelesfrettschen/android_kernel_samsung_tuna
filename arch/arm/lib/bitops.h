@@ -1,7 +1,11 @@
 #if __LINUX_ARM_ARCH__ >= 6
 	.macro	bitop, instr
 	ands	ip, r1, #3
+#ifdef __clang__
+	strbne	r1, [ip]		@ assert word-aligned
+#else
 	strneb	r1, [ip]		@ assert word-aligned
+#endif
 	mov	r2, #1
 	and	r3, r0, #31		@ Get bit offset
 	mov	r0, r0, lsr #5
@@ -17,7 +21,11 @@
 
 	.macro	testop, instr, store
 	ands	ip, r1, #3
+#ifdef __clang__
+	strbne	r1, [ip]		@ assert word-aligned
+#else
 	strneb	r1, [ip]		@ assert word-aligned
+#endif
 	mov	r2, #1
 	and	r3, r0, #31		@ Get bit offset
 	mov	r0, r0, lsr #5
@@ -38,7 +46,11 @@
 #else
 	.macro	bitop, instr
 	ands	ip, r1, #3
+#ifdef __clang__
+	strbne	r1, [ip]		@ assert word-aligned
+#else
 	strneb	r1, [ip]		@ assert word-aligned
+#endif
 	and	r2, r0, #31
 	mov	r0, r0, lsr #5
 	mov	r3, #1
@@ -61,7 +73,11 @@
  */
 	.macro	testop, instr, store
 	ands	ip, r1, #3
+#ifdef __clang__
+	strbne	r1, [ip]		@ assert word-aligned
+#else
 	strneb	r1, [ip]		@ assert word-aligned
+#endif
 	and	r3, r0, #31
 	mov	r0, r0, lsr #5
 	save_and_disable_irqs ip

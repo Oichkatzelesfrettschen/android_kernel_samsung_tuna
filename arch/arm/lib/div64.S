@@ -85,8 +85,13 @@ ENTRY(__do_div64)
  	@ Break out early if dividend reaches 0.
 2:	cmp	xh, yl
 	orrcs	yh, yh, ip
+#ifdef __clang__
+	subscs	xh, xh, yl
+	movsne	ip, ip, lsr #1
+#else
 	subcss	xh, xh, yl
 	movnes	ip, ip, lsr #1
+#endif
 	mov	yl, yl, lsr #1
 	bne	2b
 

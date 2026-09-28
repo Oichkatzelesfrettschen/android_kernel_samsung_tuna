@@ -69,7 +69,11 @@
 	.endm
 
 	.macro str1b ptr reg cond=al abort
+#ifdef __clang__
+	strb\cond \reg, [\ptr], #1
+#else
 	str\cond\()b \reg, [\ptr], #1
+#endif
 	.endm
 
 	.macro enter reg1 reg2
@@ -101,4 +105,3 @@ ENDPROC(__copy_from_user)
 	ldr	r0, [sp], #4
 	copy_abort_end
 	.popsection
-
