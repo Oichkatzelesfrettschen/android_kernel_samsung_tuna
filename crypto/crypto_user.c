@@ -184,15 +184,18 @@ static int crypto_dump_report(struct sk_buff *skb, struct netlink_callback *cb)
 	info.nlmsg_seq = cb->nlh->nlmsg_seq;
 	info.nlmsg_flags = NLM_F_MULTI;
 
+	down_read(&crypto_alg_sem);
 	list_for_each_entry(alg, &crypto_alg_list, cra_list) {
 		err = crypto_report_alg(alg, &info);
 		if (err)
 			goto out_err;
 	}
+	up_read(&crypto_alg_sem);
 
 out:
 	return skb->len;
 out_err:
+	up_read(&crypto_alg_sem);
 	return err;
 }
 
