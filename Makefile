@@ -328,15 +328,84 @@ include $(srctree)/scripts/Kbuild.include
 
 # Make variables (CC, etc...)
 
+ifneq ($(LLVM),)
+ifeq ($(LLVM),1)
+LLVM_PREFIX :=
+else ifneq ($(filter /%,$(LLVM)),)
+LLVM_PREFIX := $(LLVM)
+else
+LLVM_SUFFIX := $(LLVM)
+endif
+
+# CROSS_COMPILE names both the target ABI and the optional GNU assembler.
+# CLANG_TRIPLE supplies the target only when no GNU prefix is provided.
+LLVM_TARGET := $(patsubst %-,%,$(notdir $(CROSS_COMPILE)))
+ifeq ($(LLVM_TARGET),)
+LLVM_TARGET := $(patsubst %-,%,$(CLANG_TRIPLE))
+endif
+# Android's arm-linux-androidkernel tools use the androideabi target ABI.
+LLVM_TARGET := $(patsubst arm-linux-androidkernel,arm-linux-androideabi,$(LLVM_TARGET))
+ifeq ($(LLVM_TARGET),)
+ifeq ($(SRCARCH),arm)
+LLVM_TARGET := arm-linux-gnueabi
+endif
+endif
+ifeq ($(LLVM_TARGET),)
+$(error LLVM requires CROSS_COMPILE or CLANG_TRIPLE for $(SRCARCH))
+endif
+
+LLVM_CC := $(LLVM_PREFIX)clang$(LLVM_SUFFIX)
+LLVM_LD := $(LLVM_PREFIX)ld.lld$(LLVM_SUFFIX)
+LLVM_AR := $(LLVM_PREFIX)llvm-ar$(LLVM_SUFFIX)
+LLVM_NM := $(LLVM_PREFIX)llvm-nm$(LLVM_SUFFIX)
+LLVM_STRIP := $(LLVM_PREFIX)llvm-strip$(LLVM_SUFFIX)
+LLVM_OBJCOPY := $(LLVM_PREFIX)llvm-objcopy$(LLVM_SUFFIX)
+LLVM_OBJDUMP := $(LLVM_PREFIX)llvm-objdump$(LLVM_SUFFIX)
+$(foreach tool,$(LLVM_CC) $(LLVM_LD) $(LLVM_AR) $(LLVM_NM) $(LLVM_STRIP) $(LLVM_OBJCOPY) $(LLVM_OBJDUMP),$(if $(shell command -v $(tool) 2>/dev/null),,$(error LLVM tool missing: $(tool))))
+ifneq ($(shell $(LLVM_CC) -dM -E -x c /dev/null 2>/dev/null | grep '^.define __clang__ 1$$'),)
+else
+$(error LLVM compiler is not Clang: $(LLVM_CC))
+endif
+
+LLVM_CROSS_FLAGS := --target=$(LLVM_TARGET) -fgnuc-version=4.9.0
+ifneq ($(filter /%,$(CROSS_COMPILE)),)
+LLVM_CROSS_FLAGS += --prefix=$(dir $(CROSS_COMPILE)) -B$(dir $(CROSS_COMPILE))
+endif
+ifeq ($(LLVM_IAS),0)
+ifeq ($(CROSS_COMPILE),)
+$(error LLVM_IAS=0 requires CROSS_COMPILE for GNU as)
+endif
+LLVM_GNU_AS := $(if $(filter /%,$(CROSS_COMPILE)),$(dir $(CROSS_COMPILE)))$(LLVM_TARGET)-as
+ifeq ($(shell command -v $(LLVM_GNU_AS) 2>/dev/null),)
+$(error GNU assembler missing for Clang target: $(LLVM_GNU_AS))
+endif
+LLVM_CROSS_FLAGS += -no-integrated-as
+else ifneq ($(LLVM_IAS),)
+ifneq ($(LLVM_IAS),1)
+$(error LLVM_IAS must be 0 or 1)
+endif
+endif
+
+# Recursive Android kernel makes can pass CC=clang on the command line.
+override CC := $(LLVM_CC) $(LLVM_CROSS_FLAGS)
+override LD := $(LLVM_LD)
+override AS := $(CC)
+override AR := $(LLVM_AR)
+override NM := $(LLVM_NM)
+override STRIP := $(LLVM_STRIP)
+override OBJCOPY := $(LLVM_OBJCOPY)
+override OBJDUMP := $(LLVM_OBJDUMP)
+else
 AS		= $(CROSS_COMPILE)as
 LD		= $(CROSS_COMPILE)ld
 CC		= $(CROSS_COMPILE)gcc
-CPP		= $(CC) -E
 AR		= $(CROSS_COMPILE)ar
 NM		= $(CROSS_COMPILE)nm
 STRIP		= $(CROSS_COMPILE)strip
 OBJCOPY		= $(CROSS_COMPILE)objcopy
 OBJDUMP		= $(CROSS_COMPILE)objdump
+endif
+CPP		= $(CC) -E
 AWK		= awk
 GENKSYMS	= scripts/genksyms/genksyms
 INSTALLKERNEL  := installkernel

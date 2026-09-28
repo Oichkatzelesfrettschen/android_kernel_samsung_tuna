@@ -9,15 +9,18 @@
 #endif
 
 /* Clang has supported __COUNTER__ throughout its Linux kernel lifetime. */
+#undef __UNIQUE_ID
 #define __UNIQUE_ID(prefix) \
 	__PASTE(__PASTE(__UNIQUE_ID_, prefix), __COUNTER__)
 
 /* Clang advertises GCC 4.2, but implements these facilities directly. */
 #if __has_attribute(cold)
+# undef __cold
 # define __cold __attribute__((__cold__))
 #endif
 
 #if __has_builtin(__builtin_unreachable)
+# undef unreachable
 # define unreachable() __builtin_unreachable()
 #endif
 
@@ -25,9 +28,13 @@
 #if __has_attribute(warning)
 # undef __compiletime_warning
 # define __compiletime_warning(message) __attribute__((warning(message)))
+#else
+# undef __compiletime_warning
 #endif
 
 #if __has_attribute(error)
 # undef __compiletime_error
 # define __compiletime_error(message) __attribute__((error(message)))
+#else
+# undef __compiletime_error
 #endif
