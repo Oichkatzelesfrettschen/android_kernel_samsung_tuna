@@ -119,6 +119,8 @@ LDFLAGS_vmlinux += -p
 LDFLAGS_vmlinux += --no-undefined
 # Delete all temporary local symbols
 LDFLAGS_vmlinux += -X
+# Keep architecture-required symbols and the linker script when probing LLD.
+LDFLAGS_vmlinux += $(KBUILD_LDFLAGS_STRICT)
 # Next argument is a linker script
 LDFLAGS_vmlinux += -T
 
