@@ -1898,9 +1898,9 @@ static int smack_netlabel_send(struct sock *sk, struct sockaddr_in *sap)
 		sk_lbl = SMACK_UNLABELED_SOCKET;
 #ifdef CONFIG_AUDIT
 		smk_ad_init(&ad, __func__, LSM_AUDIT_DATA_NET);
-		ad.a.u.net.family = sap->sin_family;
-		ad.a.u.net.dport = sap->sin_port;
-		ad.a.u.net.v4info.daddr = sap->sin_addr.s_addr;
+		ad.a.u.net->family = sap->sin_family;
+		ad.a.u.net->dport = sap->sin_port;
+		ad.a.u.net->v4info.daddr = sap->sin_addr.s_addr;
 #endif
 		rc = smk_access(ssp->smk_out, hostsp, MAY_WRITE, &ad);
 	} else {
@@ -2926,8 +2926,8 @@ static int smack_socket_sock_rcv_skb(struct sock *sk, struct sk_buff *skb)
 
 #ifdef CONFIG_AUDIT
 	smk_ad_init(&ad, __func__, LSM_AUDIT_DATA_NET);
-	ad.a.u.net.family = sk->sk_family;
-	ad.a.u.net.netif = skb->skb_iif;
+	ad.a.u.net->family = sk->sk_family;
+	ad.a.u.net->netif = skb->skb_iif;
 	ipv4_skb_to_auditdata(skb, &ad.a, NULL);
 #endif
 	/*
@@ -3079,8 +3079,8 @@ static int smack_inet_conn_request(struct sock *sk, struct sk_buff *skb,
 
 #ifdef CONFIG_AUDIT
 	smk_ad_init(&ad, __func__, LSM_AUDIT_DATA_NET);
-	ad.a.u.net.family = family;
-	ad.a.u.net.netif = skb->skb_iif;
+	ad.a.u.net->family = family;
+	ad.a.u.net->netif = skb->skb_iif;
 	ipv4_skb_to_auditdata(skb, &ad.a, NULL);
 #endif
 	/*
