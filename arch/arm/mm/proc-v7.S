@@ -12,6 +12,9 @@
 #include <linux/init.h>
 #include <linux/linkage.h>
 #include <asm/assembler.h>
+#ifdef __clang__
+	.arch_extension sec
+#endif
 #include <asm/asm-offsets.h>
 #include <asm/hwcap.h>
 #include <asm/pgtable-hwdef.h>

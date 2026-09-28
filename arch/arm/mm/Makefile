@@ -97,6 +97,13 @@ AFLAGS_proc-v6.o	:=-Wa,-march=armv6
 plus_sec := $(call as-instr,.arch_extension sec,+sec)
 AFLAGS_proc-v7.o	:=-Wa,-march=armv7-a$(plus_sec)
 
+ifeq ($(LLVM_IAS),1)
+AFLAGS_abort-ev7.o	:=
+AFLAGS_cache-v7.o	:=
+AFLAGS_tlb-v7.o	:=
+AFLAGS_proc-v7.o	:=
+endif
+
 obj-$(CONFIG_CACHE_FEROCEON_L2)	+= cache-feroceon-l2.o
 obj-$(CONFIG_CACHE_L2X0)	+= cache-l2x0.o
 obj-$(CONFIG_CACHE_XSC3L2)	+= cache-xsc3l2.o

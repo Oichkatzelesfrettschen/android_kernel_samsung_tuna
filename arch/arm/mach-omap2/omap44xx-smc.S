@@ -11,6 +11,9 @@
  */
 
 #include <linux/linkage.h>
+#ifdef __clang__
+	.arch_extension sec
+#endif
 
 /*
  * This is common routine to manage secure monitor API

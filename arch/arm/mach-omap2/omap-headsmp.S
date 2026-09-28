@@ -16,6 +16,9 @@
  */
 
 #include <linux/linkage.h>
+#ifdef __clang__
+	.arch_extension sec
+#endif
 #include <linux/init.h>
 
 /* Physical address needed since MMU not enabled yet on secondary core */

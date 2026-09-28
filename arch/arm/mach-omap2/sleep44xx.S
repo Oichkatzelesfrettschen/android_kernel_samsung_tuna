@@ -10,6 +10,9 @@
  */
 
 #include <linux/linkage.h>
+#ifdef __clang__
+	.arch_extension sec
+#endif
 #include <asm/system.h>
 #include <asm/smp_scu.h>
 #include <asm/memory.h>
@@ -644,7 +647,7 @@ wait_l2:
 	orrne	r5, r5, #MMU_OFFSET1
 	str	r2, [r5, #TABLE_ADDRESS_OFFSET]
 	mov	r0, #0
-	mcr	p15, 0, r0, c7, c5, 4		@ Flush prefetch buffer
+	.inst	0xee070f95			@ MCR p15, 0, r0, c7, c5, 4
 	mcr	p15, 0, r0, c7, c5, 6		@ Invalidate BTB
 	mcr	p15, 0, r0, c8, c5, 0		@ Invalidate ITLB
 	mcr	p15, 0, r0, c8, c6, 0		@ Invalidate DTLB
@@ -683,7 +686,7 @@ mmu_on_label:
 	str	r0, [r2]			@ which needs to be restored
 	mov	r0, #0
 	mcr	p15, 0, r0, c7, c1, 6		@ flush TLB and issue barriers
-	mcr	p15, 0, r0, c7, c5, 4		@ Flush prefetch buffer
+	.inst	0xee070f95			@ MCR p15, 0, r0, c7, c5, 4
 	mcr	p15, 0, r0, c7, c5, 6		@ Invalidate BTB
 	mcr	p15, 0, r0, c8, c5, 0		@ Invalidate ITLB
 	mcr	p15, 0, r0, c8, c6, 0		@ Invalidate DTLB
@@ -695,7 +698,7 @@ mmu_on_label:
 
 	ldmfd	sp!, {r0-r12, pc}		@ restore regs and return
 
-	.equ	local_va2pa_offet, (PLAT_PHYS_OFFSET + PAGE_OFFSET)
+	.equ	local_va2pa_offet, ((PLAT_PHYS_OFFSET + PAGE_OFFSET) & 0xffffffff)
 
 ENDPROC(omap4_cpu_resume)
 
