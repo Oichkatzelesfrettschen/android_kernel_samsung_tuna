@@ -14,6 +14,7 @@ SECTIONS
   /DISCARD/ : {
     *(.ARM.exidx*)
     *(.ARM.extab*)
+    *(.eh_frame*)
     /*
      * Discard any r/w data - this produces a link error if we have any,
      * which is required for PIC decompression.  Local data generates
@@ -64,5 +65,22 @@ SECTIONS
   .stab.index 0		: { *(.stab.index) }
   .stab.indexstr 0	: { *(.stab.indexstr) }
   .comment 0		: { *(.comment) }
+  .ARM.attributes 0	: { *(.ARM.attributes) }
+  .symtab 0		: { *(.symtab) }
+  .symtab_shndx 0	: { *(.symtab_shndx) }
+  .shstrtab 0		: { *(.shstrtab) }
+  .strtab 0		: { *(.strtab) }
+
+  /* The decompressor runs without a dynamic linker. */
+  .bss.rel.ro 0		: { *(.bss.rel.ro) }
+  .rel.plt 0		: { *(.rel.plt) }
+  .rel.dyn 0		: { *(.rel.dyn) }
+  .plt 0		: { *(.plt) }
+  .iplt 0		: { *(.iplt) }
 }
 
+ASSERT(SIZEOF(.bss.rel.ro) == 0, "unexpected relocation BSS")
+ASSERT(SIZEOF(.rel.plt) == 0, "unexpected PLT relocations")
+ASSERT(SIZEOF(.rel.dyn) == 0, "unexpected dynamic relocations")
+ASSERT(SIZEOF(.plt) == 0, "unexpected PLT")
+ASSERT(SIZEOF(.iplt) == 0, "unexpected indirect PLT")

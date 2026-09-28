@@ -115,6 +115,9 @@ SECTIONS
 			__exception_text_end = .;
 			IRQENTRY_TEXT
 			TEXT_TEXT
+#ifdef __clang__
+			*(.text.fastpath)
+#endif
 			SCHED_TEXT
 			LOCK_TEXT
 			KPROBES_TEXT
@@ -203,6 +206,9 @@ SECTIONS
 		 * and the usual data section
 		 */
 		DATA_DATA
+#ifdef __clang__
+		*(.data.rel.ro .data.rel.ro.*)
+#endif
 		CONSTRUCTORS
 
 		_edata = .;
@@ -273,9 +279,27 @@ SECTIONS
 
 	STABS_DEBUG
 	.comment 0 : { *(.comment) }
+#ifdef __clang__
+	.ARM.attributes 0 : { *(.ARM.attributes) }
+	.symtab 0 : { *(.symtab) }
+	.symtab_shndx 0 : { *(.symtab_shndx) }
+	.shstrtab 0 : { *(.shstrtab) }
+	.strtab 0 : { *(.strtab) }
+
+	/* A static kernel cannot resolve PLT calls or dynamic relocations. */
+	.bss.rel.ro 0 : { *(.bss.rel.ro) }
+	.got.plt 0 : { *(.got.plt) }
+	.rel.plt 0 : { *(.rel.plt) }
+	.rel.dyn 0 : { *(.rel.dyn) }
+	.plt 0 : { *(.plt) }
+	.iplt 0 : { *(.iplt) }
+#endif
 
 	/* Default discards */
 	DISCARDS
+#ifdef __clang__
+	/DISCARD/ : { *(.eh_frame) }
+#endif
 
 #ifndef CONFIG_SMP_ON_UP
 	/DISCARD/ : {
@@ -291,3 +315,11 @@ SECTIONS
  */
 ASSERT((__proc_info_end - __proc_info_begin), "missing CPU support")
 ASSERT((__arch_info_end - __arch_info_begin), "no machine record defined")
+#ifdef __clang__
+ASSERT(SIZEOF(.bss.rel.ro) == 0, "unexpected relocation BSS")
+ASSERT(SIZEOF(.got.plt) == 0, "unexpected GOT PLT")
+ASSERT(SIZEOF(.rel.plt) == 0, "unexpected PLT relocations")
+ASSERT(SIZEOF(.rel.dyn) == 0, "unexpected dynamic relocations")
+ASSERT(SIZEOF(.plt) == 0, "unexpected PLT")
+ASSERT(SIZEOF(.iplt) == 0, "unexpected indirect PLT")
+#endif
