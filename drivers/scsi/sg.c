@@ -147,6 +147,7 @@ typedef struct sg_fd {		/* holds the state of a file descriptor */
 	struct sg_device *parentdp;	/* owning device */
 	wait_queue_head_t read_wait;	/* queue read until command done */
 	rwlock_t rq_list_lock;	/* protect access to list in req_arr */
+	struct mutex reserve_mutex;	/* protect reserve lifetime and mmap state */
 	int timeout;		/* defaults to SG_DEFAULT_TIMEOUT      */
 	int timeout_user;	/* defaults to SG_DEFAULT_TIMEOUT_USER */
 	Sg_scatter_hold reserve;	/* buffer held for this file descriptor */
@@ -682,18 +683,23 @@ sg_new_write(Sg_fd *sfp, struct file *file, const char __user *buf,
 		return -ENOSYS;
 	}
 	if (hp->flags & SG_FLAG_MMAP_IO) {
+		mutex_lock(&sfp->reserve_mutex);
 		if (hp->dxfer_len > sfp->reserve.bufflen) {
+			mutex_unlock(&sfp->reserve_mutex);
 			sg_remove_request(sfp, srp);
 			return -ENOMEM;	/* MMAP_IO size must fit in reserve buffer */
 		}
 		if (hp->flags & SG_FLAG_DIRECT_IO) {
+			mutex_unlock(&sfp->reserve_mutex);
 			sg_remove_request(sfp, srp);
 			return -EINVAL;	/* either MMAP_IO or DIRECT_IO (not both) */
 		}
 		if (sg_res_in_use(sfp)) {
+			mutex_unlock(&sfp->reserve_mutex);
 			sg_remove_request(sfp, srp);
 			return -EBUSY;	/* reserve buffer already being used */
 		}
+		mutex_unlock(&sfp->reserve_mutex);
 	}
 	ul_timeout = msecs_to_jiffies(srp->header.timeout);
 	timeout = (ul_timeout < INT_MAX) ? ul_timeout : INT_MAX;
@@ -856,6 +862,7 @@ sg_ioctl(struct file *filp, unsigned int cmd_in, unsigned long arg)
 		result = get_user(val, ip);
 		if (result)
 			return result;
+		mutex_lock(&sfp->reserve_mutex);
 		if (val) {
 			sfp->low_dma = 1;
 			if ((0 == sfp->low_dma) && (0 == sg_res_in_use(sfp))) {
@@ -864,10 +871,13 @@ sg_ioctl(struct file *filp, unsigned int cmd_in, unsigned long arg)
 				sg_build_reserve(sfp, val);
 			}
 		} else {
-			if (sdp->detached)
+			if (sdp->detached) {
+				mutex_unlock(&sfp->reserve_mutex);
 				return -ENODEV;
+			}
 			sfp->low_dma = sdp->device->host->unchecked_isa_dma;
 		}
+		mutex_unlock(&sfp->reserve_mutex);
 		return 0;
 	case SG_GET_LOW_DMA:
 		return put_user((int) sfp->low_dma, ip);
@@ -933,16 +943,22 @@ sg_ioctl(struct file *filp, unsigned int cmd_in, unsigned long arg)
                         return -EINVAL;
 		val = min_t(int, val,
 			    queue_max_sectors(sdp->device->request_queue) * 512);
+		mutex_lock(&sfp->reserve_mutex);
 		if (val != sfp->reserve.bufflen) {
-			if (sg_res_in_use(sfp) || sfp->mmap_called)
+			if (sg_res_in_use(sfp) || sfp->mmap_called) {
+				mutex_unlock(&sfp->reserve_mutex);
 				return -EBUSY;
+			}
 			sg_remove_scat(&sfp->reserve);
 			sg_build_reserve(sfp, val);
 		}
+		mutex_unlock(&sfp->reserve_mutex);
 		return 0;
 	case SG_GET_RESERVED_SIZE:
+		mutex_lock(&sfp->reserve_mutex);
 		val = min_t(int, sfp->reserve.bufflen,
 			    queue_max_sectors(sdp->device->request_queue) * 512);
+		mutex_unlock(&sfp->reserve_mutex);
 		return put_user(val, ip);
 	case SG_SET_COMMAND_Q:
 		result = get_user(val, ip);
@@ -1200,9 +1216,12 @@ sg_vma_fault(struct vm_area_struct *vma, struct vm_fault *vmf)
 	if ((NULL == vma) || (!(sfp = (Sg_fd *) vma->vm_private_data)))
 		return VM_FAULT_SIGBUS;
 	rsv_schp = &sfp->reserve;
+	mutex_lock(&sfp->reserve_mutex);
 	offset = vmf->pgoff << PAGE_SHIFT;
-	if (offset >= rsv_schp->bufflen)
+	if (offset >= rsv_schp->bufflen) {
+		mutex_unlock(&sfp->reserve_mutex);
 		return VM_FAULT_SIGBUS;
+	}
 	SCSI_LOG_TIMEOUT(3, printk("sg_vma_fault: offset=%lu, scatg=%d\n",
 				   offset, rsv_schp->k_use_sg));
 	sa = vma->vm_start;
@@ -1215,12 +1234,14 @@ sg_vma_fault(struct vm_area_struct *vma, struct vm_fault *vmf)
 						     offset >> PAGE_SHIFT);
 			get_page(page);	/* increment page count */
 			vmf->page = page;
+			mutex_unlock(&sfp->reserve_mutex);
 			return 0; /* success */
 		}
 		sa += len;
 		offset -= len;
 	}
 
+	mutex_unlock(&sfp->reserve_mutex);
 	return VM_FAULT_SIGBUS;
 }
 
@@ -1244,8 +1265,11 @@ sg_mmap(struct file *filp, struct vm_area_struct *vma)
 	if (vma->vm_pgoff)
 		return -EINVAL;	/* want no offset */
 	rsv_schp = &sfp->reserve;
-	if (req_sz > rsv_schp->bufflen)
+	mutex_lock(&sfp->reserve_mutex);
+	if (req_sz > rsv_schp->bufflen) {
+		mutex_unlock(&sfp->reserve_mutex);
 		return -ENOMEM;	/* cannot map more than reserved buffer */
+	}
 
 	sa = vma->vm_start;
 	length = 1 << (PAGE_SHIFT + rsv_schp->page_order);
@@ -1259,6 +1283,7 @@ sg_mmap(struct file *filp, struct vm_area_struct *vma)
 	vma->vm_flags |= VM_RESERVED;
 	vma->vm_private_data = sfp;
 	vma->vm_ops = &sg_mmap_vm_ops;
+	mutex_unlock(&sfp->reserve_mutex);
 	return 0;
 }
 
@@ -1669,9 +1694,22 @@ static int sg_start_req(Sg_request *srp, unsigned char *cmd)
 	rq->end_io_data = srp;
 	rq->sense = srp->sense_b;
 	rq->retries = SG_DEFAULT_RETRIES;
+	mutex_lock(&sfp->reserve_mutex);
+	if (hp->interface_id == 'S' && (hp->flags & SG_FLAG_MMAP_IO)) {
+		if (hp->dxfer_len > rsv_schp->bufflen) {
+			res = -ENOMEM;
+			goto out_unlock;
+		}
+		if (sg_res_in_use(sfp)) {
+			res = -EBUSY;
+			goto out_unlock;
+		}
+	}
 
-	if ((dxfer_len <= 0) || (dxfer_dir == SG_DXFER_NONE))
-		return 0;
+	if ((dxfer_len <= 0) || (dxfer_dir == SG_DXFER_NONE)) {
+		res = 0;
+		goto out_unlock;
+	}
 
 	if (sg_allow_dio && hp->flags & SG_FLAG_DIRECT_IO &&
 	    dxfer_dir != SG_DXFER_UNKNOWN && !iov_count &&
@@ -1687,7 +1725,7 @@ static int sg_start_req(Sg_request *srp, unsigned char *cmd)
 		else {
 			res = sg_build_indirect(req_schp, sfp, dxfer_len);
 			if (res)
-				return res;
+				goto out_unlock;
 		}
 
 		md->pages = req_schp->pages;
@@ -1700,6 +1738,8 @@ static int sg_start_req(Sg_request *srp, unsigned char *cmd)
 		else
 			md->from_user = 0;
 	}
+	/* res_used pins reserve pages while user mapping may fault on sg_mmap. */
+	mutex_unlock(&sfp->reserve_mutex);
 
 	if (unlikely(iov_count > UIO_MAXIOV))
 		return -EINVAL;
@@ -1735,6 +1775,9 @@ static int sg_start_req(Sg_request *srp, unsigned char *cmd)
 		}
 	}
 	return res;
+out_unlock:
+	mutex_unlock(&sfp->reserve_mutex);
+	return res;
 }
 
 static int sg_finish_rem_req(Sg_request * srp)
@@ -1752,10 +1795,12 @@ static int sg_finish_rem_req(Sg_request * srp)
 		blk_put_request(srp->rq);
 	}
 
+	mutex_lock(&sfp->reserve_mutex);
 	if (srp->res_used)
 		sg_unlink_reserve(sfp, srp);
 	else
 		sg_remove_scat(req_schp);
+	mutex_unlock(&sfp->reserve_mutex);
 
 	sg_remove_request(sfp, srp);
 
@@ -1932,6 +1977,7 @@ sg_link_reserve(Sg_fd * sfp, Sg_request * srp, int size)
 	Sg_scatter_hold *rsv_schp = &sfp->reserve;
 	int k, num, rem;
 
+	lockdep_assert_held(&sfp->reserve_mutex);
 	srp->res_used = 1;
 	SCSI_LOG_TIMEOUT(4, printk("sg_link_reserve: size=%d\n", size));
 	rem = size;
@@ -1959,6 +2005,7 @@ sg_unlink_reserve(Sg_fd * sfp, Sg_request * srp)
 {
 	Sg_scatter_hold *req_schp = &srp->data;
 
+	lockdep_assert_held(&sfp->reserve_mutex);
 	SCSI_LOG_TIMEOUT(4, printk("sg_unlink_reserve: req->k_use_sg=%d\n",
 				   (int) req_schp->k_use_sg));
 	req_schp->k_use_sg = 0;
@@ -2077,6 +2124,7 @@ sg_add_sfp(Sg_device * sdp, int dev)
 
 	init_waitqueue_head(&sfp->read_wait);
 	rwlock_init(&sfp->rq_list_lock);
+	mutex_init(&sfp->reserve_mutex);
 
 	kref_init(&sfp->f_ref);
 	sfp->timeout = SG_DEFAULT_TIMEOUT;
@@ -2114,6 +2162,7 @@ static void sg_remove_sfp_usercontext(struct work_struct *work)
 	while (sfp->headrp)
 		sg_finish_rem_req(sfp->headrp);
 
+	mutex_lock(&sfp->reserve_mutex);
 	if (sfp->reserve.bufflen > 0) {
 		SCSI_LOG_TIMEOUT(6,
 			printk("sg_remove_sfp:    bufflen=%d, k_use_sg=%d\n",
@@ -2121,6 +2170,7 @@ static void sg_remove_sfp_usercontext(struct work_struct *work)
 				(int) sfp->reserve.k_use_sg));
 		sg_remove_scat(&sfp->reserve);
 	}
+	mutex_unlock(&sfp->reserve_mutex);
 
 	SCSI_LOG_TIMEOUT(6,
 		printk("sg_remove_sfp: %s, sfp=0x%p\n",
@@ -2154,6 +2204,7 @@ sg_res_in_use(Sg_fd * sfp)
 	const Sg_request *srp;
 	unsigned long iflags;
 
+	lockdep_assert_held(&sfp->reserve_mutex);
 	read_lock_irqsave(&sfp->rq_list_lock, iflags);
 	for (srp = sfp->headrp; srp; srp = srp->nextrp)
 		if (srp->res_used)
