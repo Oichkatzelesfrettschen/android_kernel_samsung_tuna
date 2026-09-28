@@ -415,7 +415,7 @@ __armv4_mpu_cache_on:
 		mcr	p15, 0, r0, c5, c0, 0	@ D-access permission
 
 		mov	r0, #0
-		mcr	p15, 0, r0, c7, c10, 4	@ drain write buffer
+		.inst 0xee070f9a	@ drain write buffer
 		mcr	p15, 0, r0, c7, c5, 0	@ flush(inval) I-Cache
 		mcr	p15, 0, r0, c7, c6, 0	@ flush(inval) D-Cache
 		mrc	p15, 0, r0, c1, c0, 0	@ read control reg
@@ -513,7 +513,7 @@ __armv4_mmu_cache_on:
 #ifdef CONFIG_MMU
 		bl	__setup_mmu
 		mov	r0, #0
-		mcr	p15, 0, r0, c7, c10, 4	@ drain write buffer
+		.inst 0xee070f9a	@ drain write buffer
 		mcr	p15, 0, r0, c8, c7, 0	@ flush I,D TLBs
 		mrc	p15, 0, r0, c1, c0, 0	@ read control reg
 		orr	r0, r0, #0x5000		@ I-cache enable, RR cache replacement
@@ -534,7 +534,7 @@ __armv7_mmu_cache_on:
 		tst	r11, #0xf		@ VMSA
 		blne	__setup_mmu
 		mov	r0, #0
-		mcr	p15, 0, r0, c7, c10, 4	@ drain write buffer
+		.inst 0xee070f9a	@ drain write buffer
 		tst	r11, #0xf		@ VMSA
 		mcrne	p15, 0, r0, c8, c7, 0	@ flush I,D TLBs
 #endif
@@ -554,7 +554,7 @@ __armv7_mmu_cache_on:
 		mcr	p15, 0, r0, c1, c0, 0	@ load control register
 		mrc	p15, 0, r0, c1, c0, 0	@ and read it back
 		mov	r0, #0
-		mcr	p15, 0, r0, c7, c5, 4	@ ISB
+		.inst 0xee070f95	@ ISB
 		mov	pc, r12
 
 __fa526_cache_on:
@@ -562,7 +562,7 @@ __fa526_cache_on:
 		bl	__setup_mmu
 		mov	r0, #0
 		mcr	p15, 0, r0, c7, c7, 0	@ Invalidate whole cache
-		mcr	p15, 0, r0, c7, c10, 4	@ drain write buffer
+		.inst 0xee070f9a	@ drain write buffer
 		mcr	p15, 0, r0, c8, c7, 0	@ flush UTLB
 		mrc	p15, 0, r0, c1, c0, 0	@ read control reg
 		orr	r0, r0, #0x1000		@ I-cache enable
@@ -828,7 +828,7 @@ __armv4_mpu_cache_off:
 		bic	r0, r0, #0x000d
 		mcr	p15, 0, r0, c1, c0	@ turn MPU and cache off
 		mov	r0, #0
-		mcr	p15, 0, r0, c7, c10, 4	@ drain write buffer
+		.inst 0xee070f9a	@ drain write buffer
 		mcr	p15, 0, r0, c7, c6, 0	@ flush D-Cache
 		mcr	p15, 0, r0, c7, c5, 0	@ flush I-Cache
 		mov	pc, lr
@@ -867,8 +867,8 @@ __armv7_mmu_cache_off:
 		mcr	p15, 0, r0, c8, c7, 0	@ invalidate whole TLB
 #endif
 		mcr	p15, 0, r0, c7, c5, 6	@ invalidate BTC
-		mcr	p15, 0, r0, c7, c10, 4	@ DSB
-		mcr	p15, 0, r0, c7, c5, 4	@ ISB
+		.inst 0xee070f9a	@ DSB
+		.inst 0xee070f95	@ ISB
 		mov	pc, r12
 
 __arm6_mmu_cache_off:
@@ -913,14 +913,14 @@ __armv4_mpu_cache_flush:
 
 		teq	r2, #0
 		mcrne	p15, 0, ip, c7, c5, 0	@ invalidate I cache
-		mcr	p15, 0, ip, c7, c10, 4	@ drain WB
+		.inst 0xee07cf9a	@ drain WB
 		mov	pc, lr
 		
 __fa526_cache_flush:
 		mov	r1, #0
 		mcr	p15, 0, r1, c7, c14, 0	@ clean and invalidate D cache
 		mcr	p15, 0, r1, c7, c5, 0	@ flush I cache
-		mcr	p15, 0, r1, c7, c10, 4	@ drain WB
+		.inst 0xee071f9a	@ drain WB
 		mov	pc, lr
 
 __armv6_mmu_cache_flush:
@@ -928,7 +928,7 @@ __armv6_mmu_cache_flush:
 		mcr	p15, 0, r1, c7, c14, 0	@ clean+invalidate D
 		mcr	p15, 0, r1, c7, c5, 0	@ invalidate I+BTB
 		mcr	p15, 0, r1, c7, c15, 0	@ clean+invalidate unified
-		mcr	p15, 0, r1, c7, c10, 4	@ drain WB
+		.inst 0xee071f9a	@ drain WB
 		mov	pc, lr
 
 __armv7_mmu_cache_flush:
@@ -939,7 +939,7 @@ __armv7_mmu_cache_flush:
 		mcr	p15, 0, r10, c7, c14, 0	@ clean+invalidate D
 		b	iflush
 hierarchical:
-		mcr	p15, 0, r10, c7, c10, 5	@ DMB
+		.inst 0xee07afba	@ DMB
 		stmfd	sp!, {r0-r7, r9-r11}
 		mrc	p15, 1, r0, c0, c0, 1	@ read clidr
 		ands	r3, r0, #0x7000000	@ extract loc from clidr
@@ -953,7 +953,7 @@ loop1:
 		cmp	r1, #2			@ see what cache we have at this level
 		blt	skip			@ skip if no cache, or just i-cache
 		mcr	p15, 2, r10, c0, c0, 0	@ select current cache level in cssr
-		mcr	p15, 0, r10, c7, c5, 4	@ isb to sych the new cssr&csidr
+		.inst 0xee07af95	@ isb to sych the new cssr&csidr
 		mrc	p15, 1, r1, c0, c0, 0	@ read the new csidr
 		and	r2, r1, #7		@ extract the length of the cache lines
 		add	r2, r2, #4		@ add 4 (line length offset)
@@ -985,17 +985,22 @@ finished:
 		mov	r10, #0			@ swith back to cache level 0
 		mcr	p15, 2, r10, c0, c0, 0	@ select current cache level in cssr
 iflush:
-		mcr	p15, 0, r10, c7, c10, 4	@ DSB
+		.inst 0xee07af9a	@ DSB
 		mcr	p15, 0, r10, c7, c5, 0	@ invalidate I+BTB
-		mcr	p15, 0, r10, c7, c10, 4	@ DSB
-		mcr	p15, 0, r10, c7, c5, 4	@ ISB
+		.inst 0xee07af9a	@ DSB
+		.inst 0xee07af95	@ ISB
 		mov	pc, lr
 
 __armv5tej_mmu_cache_flush:
-1:		mrc	p15, 0, r15, c7, c14, 3	@ test,clean,invalidate D cache
+1:
+#ifdef __clang__
+		mrc	p15, 0, apsr_nzcv, c7, c14, 3
+#else
+		mrc	p15, 0, r15, c7, c14, 3	@ test,clean,invalidate D cache
+#endif
 		bne	1b
 		mcr	p15, 0, r0, c7, c5, 0	@ flush I cache
-		mcr	p15, 0, r0, c7, c10, 4	@ drain WB
+		.inst 0xee070f9a	@ drain WB
 		mov	pc, lr
 
 __armv4_mmu_cache_flush:
@@ -1027,7 +1032,7 @@ no_cache_id:
 
 		mcr	p15, 0, r1, c7, c5, 0	@ flush I cache
 		mcr	p15, 0, r1, c7, c6, 0	@ flush D cache
-		mcr	p15, 0, r1, c7, c10, 4	@ drain WB
+		.inst 0xee071f9a	@ drain WB
 		mov	pc, lr
 
 __armv3_mmu_cache_flush:

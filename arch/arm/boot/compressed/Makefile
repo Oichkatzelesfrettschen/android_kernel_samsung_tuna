@@ -102,6 +102,9 @@ endif
 
 ccflags-y := -fpic -fno-builtin $(call cc-option,-fno-stack-protector)
 asflags-y := -Wa,-march=armv7-a$(plus_sec)
+ifeq ($(LLVM_IAS),1)
+asflags-y :=
+endif
 
 # Supply ZRELADDR to the decompressor via a linker symbol.
 ifneq ($(CONFIG_AUTO_ZRELADDR),y)
