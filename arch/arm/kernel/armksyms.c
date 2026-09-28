@@ -47,6 +47,21 @@ extern void __aeabi_uidiv(void);
 extern void __aeabi_uidivmod(void);
 extern void __aeabi_ulcmp(void);
 
+#if defined(CONFIG_AEABI) && defined(__clang__)
+extern void __aeabi_memcpy(void);
+extern void __aeabi_memcpy4(void);
+extern void __aeabi_memcpy8(void);
+extern void __aeabi_memmove(void);
+extern void __aeabi_memmove4(void);
+extern void __aeabi_memmove8(void);
+extern void __aeabi_memset(void);
+extern void __aeabi_memset4(void);
+extern void __aeabi_memset8(void);
+extern void __aeabi_memclr(void);
+extern void __aeabi_memclr4(void);
+extern void __aeabi_memclr8(void);
+#endif
+
 extern void fpundefinstr(void);
 
 
@@ -137,6 +152,21 @@ EXPORT_SYMBOL(__aeabi_lmul);
 EXPORT_SYMBOL(__aeabi_uidiv);
 EXPORT_SYMBOL(__aeabi_uidivmod);
 EXPORT_SYMBOL(__aeabi_ulcmp);
+
+#ifdef __clang__
+EXPORT_SYMBOL(__aeabi_memcpy);
+EXPORT_SYMBOL(__aeabi_memcpy4);
+EXPORT_SYMBOL(__aeabi_memcpy8);
+EXPORT_SYMBOL(__aeabi_memmove);
+EXPORT_SYMBOL(__aeabi_memmove4);
+EXPORT_SYMBOL(__aeabi_memmove8);
+EXPORT_SYMBOL(__aeabi_memset);
+EXPORT_SYMBOL(__aeabi_memset4);
+EXPORT_SYMBOL(__aeabi_memset8);
+EXPORT_SYMBOL(__aeabi_memclr);
+EXPORT_SYMBOL(__aeabi_memclr4);
+EXPORT_SYMBOL(__aeabi_memclr8);
+#endif
 #endif
 
 	/* bitops */

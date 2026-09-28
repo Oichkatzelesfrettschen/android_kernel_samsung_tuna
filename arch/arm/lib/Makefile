@@ -34,6 +34,12 @@ obj-$(CONFIG_UACCESS_WITH_MEMCPY) += uaccess_with_memcpy.o
 
 lib-$(CONFIG_MMU) += $(mmu-y)
 
+ifeq ($(CONFIG_AEABI),y)
+ifneq ($(LLVM),)
+lib-y += aeabi_mem.o
+endif
+endif
+
 ifeq ($(CONFIG_CPU_32v3),y)
   lib-y	+= io-readsw-armv3.o io-writesw-armv3.o
 else
