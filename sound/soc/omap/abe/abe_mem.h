@@ -65,18 +65,54 @@
 #define OMAP_ABE_PMEM 3
 #define OMAP_ABE_AESS 4
 
-/* Distinction between Read and Write from/to ABE memory
- * is useful for simulation tool */
+/* ABE memory is mapped as device I/O. Keep each bus access word-sized even
+ * when a caller uses only one byte of a copied word.
+ */
 static inline void omap_abe_mem_write(struct omap_abe *abe, int bank,
 				u32 offset, u32 *src, size_t bytes)
 {
-	memcpy((abe->io_base[bank] + offset), src, bytes);
+	const u8 *source_bytes = (const u8 *)src;
+	size_t transferred = 0;
+
+	while (transferred < bytes) {
+		u32 current_offset = offset + transferred;
+		u32 word_offset = current_offset & ~3U;
+		size_t byte_offset = current_offset & 3U;
+		size_t transfer_bytes = sizeof(u32) - byte_offset;
+		void __iomem *word_address = abe->io_base[bank] + word_offset;
+		u32 word;
+
+		if (transfer_bytes > bytes - transferred)
+			transfer_bytes = bytes - transferred;
+		if (byte_offset || transfer_bytes != sizeof(u32))
+			word = __raw_readl(word_address);
+		memcpy((u8 *)&word + byte_offset, source_bytes + transferred,
+		       transfer_bytes);
+		__raw_writel(word, word_address);
+		transferred += transfer_bytes;
+	}
 }
 
 static inline void omap_abe_mem_read(struct omap_abe *abe, int bank,
 				u32 offset, u32 *dest, size_t bytes)
 {
-	memcpy(dest, (abe->io_base[bank] + offset), bytes);
+	u8 *destination_bytes = (u8 *)dest;
+	size_t transferred = 0;
+
+	while (transferred < bytes) {
+		u32 current_offset = offset + transferred;
+		u32 word_offset = current_offset & ~3U;
+		size_t byte_offset = current_offset & 3U;
+		size_t transfer_bytes = sizeof(u32) - byte_offset;
+		void __iomem *word_address = abe->io_base[bank] + word_offset;
+		u32 word = __raw_readl(word_address);
+
+		if (transfer_bytes > bytes - transferred)
+			transfer_bytes = bytes - transferred;
+		memcpy(destination_bytes + transferred,
+		       (u8 *)&word + byte_offset, transfer_bytes);
+		transferred += transfer_bytes;
+	}
 }
 
 static inline u32 omap_abe_reg_readl(struct omap_abe *abe, u32 offset)
@@ -93,7 +129,19 @@ static inline void omap_abe_reg_writel(struct omap_abe *abe,
 static inline void *omap_abe_reset_mem(struct omap_abe *abe, int bank,
 			u32 offset, size_t bytes)
 {
-	return memset(abe->io_base[bank] + offset, 0, bytes);
+	void __iomem *start_address = abe->io_base[bank] + offset;
+	u32 zero = 0;
+
+	while (bytes) {
+		size_t transfer_bytes = sizeof(zero) - (offset & 3U);
+
+		if (transfer_bytes > bytes)
+			transfer_bytes = bytes;
+		omap_abe_mem_write(abe, bank, offset, &zero, transfer_bytes);
+		offset += transfer_bytes;
+		bytes -= transfer_bytes;
+	}
+	return start_address;
 }
 
 #endif /*_ABE_MEM_H_*/
