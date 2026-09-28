@@ -102,7 +102,7 @@ bool ap_fw_loaded = FALSE;
 
 #ifdef DHD_DEBUG
 const char dhd_version[] = "Dongle Host Driver, version " EPI_VERSION_STR "\nCompiled on "
-	__DATE__ " at " __TIME__;
+	DHD_BUILD_DATE_TIME;
 #else
 const char dhd_version[] = "Dongle Host Driver, version " EPI_VERSION_STR;
 #endif

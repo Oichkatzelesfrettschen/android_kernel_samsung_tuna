@@ -34,6 +34,12 @@
 #ifndef _dhd_h_
 #define _dhd_h_
 
+#ifdef DHD_BUILD_TIMESTAMP
+#define DHD_BUILD_DATE_TIME DHD_BUILD_TIMESTAMP
+#else
+#define DHD_BUILD_DATE_TIME __DATE__ " at " __TIME__
+#endif
+
 #include <linux/init.h>
 #include <linux/kernel.h>
 #include <linux/slab.h>
