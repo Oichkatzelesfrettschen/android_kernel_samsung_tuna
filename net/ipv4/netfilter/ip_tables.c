@@ -565,7 +565,8 @@ check_entry(const struct ipt_entry *e)
 	if (!ip_checkentry(&e->ip))
 		return -EINVAL;
 
-	return xt_check_entry_offsets(e, e->target_offset, e->next_offset);
+	return xt_check_entry_offsets(e, e->elems, e->target_offset,
+				      e->next_offset);
 }
 
 static int

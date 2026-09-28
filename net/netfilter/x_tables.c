@@ -548,7 +548,36 @@ int xt_compat_match_to_user(const struct xt_entry_match *m,
 EXPORT_SYMBOL_GPL(xt_compat_match_to_user);
 #endif /* CONFIG_COMPAT */
 
-int xt_check_entry_offsets(const void *base, unsigned int target_offset,
+static int xt_check_entry_matches(const char *match, const char *target)
+{
+	int remaining = target - match;
+
+	if (remaining < 0)
+		return -EINVAL;
+
+	while (remaining) {
+		const struct xt_entry_match *entry_match;
+		unsigned int match_size;
+
+		if ((unsigned long)match % __alignof__(struct xt_entry_match) ||
+		    remaining < (int)sizeof(*entry_match))
+			return -EINVAL;
+
+		entry_match = (const void *)match;
+		match_size = entry_match->u.match_size;
+		if (match_size < sizeof(*entry_match) ||
+		    match_size > (unsigned int)remaining)
+			return -EINVAL;
+
+		match += match_size;
+		remaining -= match_size;
+	}
+
+	return 0;
+}
+
+int xt_check_entry_offsets(const void *base, const char *elems,
+			   unsigned int target_offset,
 			   unsigned int next_offset)
 {
 	const struct xt_entry_target *target;
@@ -564,7 +593,11 @@ int xt_check_entry_offsets(const void *base, unsigned int target_offset,
 	if (target_offset + target->u.target_size > next_offset)
 		return -EINVAL;
 
-	return 0;
+	if (target->u.user.name[0] == '\0' &&
+	    target_offset + sizeof(struct xt_standard_target) != next_offset)
+		return -EINVAL;
+
+	return xt_check_entry_matches(elems, entry + target_offset);
 }
 EXPORT_SYMBOL(xt_check_entry_offsets);
 

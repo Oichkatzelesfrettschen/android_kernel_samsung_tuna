@@ -470,7 +470,8 @@ static inline int check_entry(const struct arpt_entry *e)
 	if (!arp_checkentry(&e->arp))
 		return -EINVAL;
 
-	return xt_check_entry_offsets(e, e->target_offset, e->next_offset);
+	return xt_check_entry_offsets(e, e->elems, e->target_offset,
+				      e->next_offset);
 }
 
 static inline int check_target(struct arpt_entry *e, const char *name)

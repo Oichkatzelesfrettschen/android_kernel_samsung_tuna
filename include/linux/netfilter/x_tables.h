@@ -421,7 +421,8 @@ extern void xt_unregister_match(struct xt_match *target);
 extern int xt_register_matches(struct xt_match *match, unsigned int n);
 extern void xt_unregister_matches(struct xt_match *match, unsigned int n);
 
-int xt_check_entry_offsets(const void *base, unsigned int target_offset,
+int xt_check_entry_offsets(const void *base, const char *elems,
+			   unsigned int target_offset,
 			   unsigned int next_offset);
 
 extern int xt_check_match(struct xt_mtchk_param *,
