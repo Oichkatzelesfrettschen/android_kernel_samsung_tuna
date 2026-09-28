@@ -48,10 +48,16 @@ ifeq ($(CONFIG_CPU_BIG_ENDIAN),y)
 KBUILD_CPPFLAGS	+= -mbig-endian
 AS		+= -EB
 LD		+= -EB
+ifneq ($(LLVM),)
+LDFLAGS		+= -m armelfb_linux_eabi
+endif
 else
 KBUILD_CPPFLAGS	+= -mlittle-endian
 AS		+= -EL
 LD		+= -EL
+ifneq ($(LLVM),)
+LDFLAGS		+= -m armelf_linux_eabi
+endif
 endif
 
 comma = ,
