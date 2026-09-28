@@ -24,6 +24,7 @@ SECTIONS {
 	.ARM.extab.devexit.text : { *(.ARM.extab.devexit.text .ARM.extab.devexit.text.*) }
 	.rodata			: { *(.rodata .rodata.*) }
 	.data..percpu		: { *(.data..percpu .data..percpu.*) }
+	.devinit.data		: { *(.devinit.data) }
 	.data			: { *(.data .data.*) }
 	.sdata			: { *(.sdata) }
 	.bss			: { *(.bss .bss.*) }
@@ -32,6 +33,9 @@ SECTIONS {
 	.modinfo		: { *(.modinfo) }
 	.gnu.linkonce.this_module : { *(.gnu.linkonce.this_module) }
 	__versions		: { *(__versions) }
+	__mcount_loc		: { *(__mcount_loc) }
+	__ksymtab_strings	: { *(__ksymtab_strings) }
+	__trace_printk_fmt	: { *(__trace_printk_fmt) }
 	.note.gnu.build-id	: { *(.note.gnu.build-id) }
 	.note.GNU-stack		: { *(.note.GNU-stack) }
 	.ARM.attributes		: { *(.ARM.attributes) }
