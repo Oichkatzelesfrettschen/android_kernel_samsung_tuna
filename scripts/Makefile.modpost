@@ -116,10 +116,16 @@ $(modules:.ko=.mod.o): %.mod.o: %.mod.c FORCE
 targets += $(modules:.ko=.mod.o)
 
 # Step 6), final link of the modules
+# LLD 11 reports synthetic .rel.* sections as orphans even when the linker
+# script names them.  Validate the linked ELF instead of using that diagnostic.
+module_ldflags = $(if $(LLVM),$(filter-out --orphan-handling=warn,$(KBUILD_LDFLAGS_MODULE)),$(KBUILD_LDFLAGS_MODULE))
+module_readelf = $(if $(LLVM),$(if $(filter 1,$(LLVM)),llvm-readelf,$(if $(filter /%,$(LLVM)),$(LLVM)llvm-readelf,llvm-readelf$(LLVM))),$(CROSS_COMPILE)readelf)
 quiet_cmd_ld_ko_o = LD [M]  $@
       cmd_ld_ko_o = $(LD) -r $(LDFLAGS)                                 \
-                             $(KBUILD_LDFLAGS_MODULE) $(LDFLAGS_MODULE) \
-                             -o $@ $(filter-out FORCE,$^)
+                             $(module_ldflags) $(LDFLAGS_MODULE)       \
+                             -o $@ $(filter-out FORCE,$^) &&           \
+		     $(PERL) $(srctree)/scripts/validate-module-sections.pl \
+		     $(module_readelf) $@ $(if $(CONFIG_MODVERSIONS),--modversions)
 
 $(modules): %.ko :%.o %.mod.o FORCE
 	$(call if_changed,ld_ko_o)

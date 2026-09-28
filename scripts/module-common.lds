@@ -6,6 +6,24 @@
 SECTIONS {
 	/DISCARD/ : { *(.discard) }
 
+	/* Preserve each module loader lifetime and its ARM unwind partner. */
+	.text			: { *(.text) }
+	.init.text		: { *(.init.text) }
+	.exit.text		: { *(.exit.text) }
+	.ARM.exidx.init.text	: { *(.ARM.exidx.init.text) }
+	.ARM.exidx.exit.text	: { *(.ARM.exidx.exit.text) }
+	.rodata			: { *(.rodata) }
+	.data			: { *(.data) }
+	.bss			: { *(.bss) }
+	__param			: { *(__param) }
+	.modinfo		: { *(.modinfo) }
+	.gnu.linkonce.this_module : { *(.gnu.linkonce.this_module) }
+	__versions		: { *(__versions) }
+	.note.gnu.build-id	: { *(.note.gnu.build-id) }
+	.note.GNU-stack		: { *(.note.GNU-stack) }
+	.ARM.attributes		: { *(.ARM.attributes) }
+	.comment		: { *(.comment) }
+
 	__ksymtab		: { *(SORT(___ksymtab+*)) }
 	__ksymtab_gpl		: { *(SORT(___ksymtab_gpl+*)) }
 	__ksymtab_unused	: { *(SORT(___ksymtab_unused+*)) }
