@@ -52,6 +52,9 @@ endif
 
 plus_sec := $(call as-instr,.arch_extension sec,+sec)
 AFLAGS_bridge_pub2sec.o	:=-Wa,-march=armv7-a$(plus_sec)
+ifeq ($(LLVM_IAS),1)
+AFLAGS_bridge_pub2sec.o	:=
+endif
 
 obj-$(CONFIG_SECURITY_MIDDLEWARE_COMPONENT) += tf_driver.o
 obj-$(CONFIG_SECURITY_MIDDLEWARE_COMPONENT) += rproc_drm.o
