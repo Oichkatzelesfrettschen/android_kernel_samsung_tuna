@@ -1093,7 +1093,14 @@ thinlto-prelink-sources := $(srctree)/scripts/generate-tuna-initcall-order.pl \
 	$(srctree)/scripts/validate-tuna-lto-prelink.pl
 ifeq ($(CONFIG_FTRACE_MCOUNT_RECORD),y)
 thinlto-prelink-sources += $(srctree)/scripts/recordmcount.c \
-	$(srctree)/scripts/recordmcount.h
+	$(srctree)/scripts/recordmcount.h \
+	$(objtree)/scripts/recordmcount
+endif
+
+# The prelink needs the built helper before its timestamp can be checked.
+ifeq ($(CONFIG_LTO_CLANG_THIN)$(CONFIG_FTRACE_MCOUNT_RECORD),yy)
+$(objtree)/scripts/recordmcount: | scripts
+	$(Q)test -x $@
 endif
 
 vmlinux.o: $(modpost-init) $(vmlinux-main) \
