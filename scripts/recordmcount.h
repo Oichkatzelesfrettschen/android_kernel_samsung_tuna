@@ -26,6 +26,11 @@
 #undef sift_rel_mcount
 #undef nop_mcount
 #undef find_secsym_ndx
+#undef get_shnum
+#undef set_shnum
+#undef get_shstrndx
+#undef get_symindex
+#undef find_symtab
 #undef __has_rel_mcount
 #undef has_rel_mcount
 #undef tot_relsize
@@ -56,6 +61,11 @@
 # define sift_rel_mcount	sift64_rel_mcount
 # define nop_mcount		nop_mcount_64
 # define find_secsym_ndx	find64_secsym_ndx
+# define get_shnum		get_shnum64
+# define set_shnum		set_shnum64
+# define get_shstrndx		get_shstrndx64
+# define get_symindex		get_symindex64
+# define find_symtab		find_symtab64
 # define __has_rel_mcount	__has64_rel_mcount
 # define has_rel_mcount		has64_rel_mcount
 # define tot_relsize		tot64_relsize
@@ -89,6 +99,11 @@
 # define sift_rel_mcount	sift32_rel_mcount
 # define nop_mcount		nop_mcount_32
 # define find_secsym_ndx	find32_secsym_ndx
+# define get_shnum		get_shnum32
+# define set_shnum		set_shnum32
+# define get_shstrndx		get_shstrndx32
+# define get_symindex		get_symindex32
+# define find_symtab		find_symtab32
 # define __has_rel_mcount	__has32_rel_mcount
 # define has_rel_mcount		has32_rel_mcount
 # define tot_relsize		tot32_relsize
@@ -174,6 +189,58 @@ static int MIPS_is_fake_mcount(Elf_Rel const *rp)
 	return is_fake;
 }
 
+/* ELF stores section counts and symbol indices in side tables above 65535. */
+static unsigned int get_shnum(Elf_Ehdr const *ehdr, Elf_Shdr const *shdr0)
+{
+	return ehdr->e_shnum ? w2(ehdr->e_shnum) : _w(shdr0->sh_size);
+}
+
+static void set_shnum(Elf_Ehdr *ehdr, Elf_Shdr *shdr0, unsigned int count)
+{
+	if (count >= SHN_LORESERVE) {
+		ehdr->e_shnum = 0;
+		shdr0->sh_size = _w(count);
+	} else {
+		ehdr->e_shnum = w2(count);
+	}
+}
+
+static unsigned int get_shstrndx(Elf_Ehdr const *ehdr, Elf_Shdr const *shdr0)
+{
+	return ehdr->e_shstrndx == SHN_XINDEX ?
+		w(shdr0->sh_link) : w2(ehdr->e_shstrndx);
+}
+
+static unsigned int get_symindex(Elf_Sym const *symbol,
+		Elf_Sym const *symbols, Elf32_Word const *extended_indices)
+{
+	unsigned long index;
+
+	if (symbol->st_shndx != SHN_XINDEX)
+		return w2(symbol->st_shndx);
+	if (!extended_indices) {
+		fprintf(stderr, "missing extended symbol section indices\n");
+		fail_file();
+	}
+	index = symbol - symbols;
+	return w(extended_indices[index]);
+}
+
+static void find_symtab(Elf_Ehdr const *ehdr, Elf_Shdr const *sections,
+		unsigned int count, Elf32_Word const **extended_indices)
+{
+	unsigned int index;
+
+	*extended_indices = NULL;
+	for (index = 0; index < count; ++index) {
+		if (w(sections[index].sh_type) == SHT_SYMTAB_SHNDX) {
+			*extended_indices = (Elf32_Word const *)
+				((char const *)ehdr + _w(sections[index].sh_offset));
+			return;
+		}
+	}
+}
+
 /* Append the new shstrtab, Elf_Shdr[], __mcount_loc and its relocations. */
 static void append_func(Elf_Ehdr *const ehdr,
 			Elf_Shdr *const shstr,
@@ -189,8 +256,9 @@ static void append_func(Elf_Ehdr *const ehdr,
 	char const *mc_name = (sizeof(Elf_Rela) == rel_entsize)
 		? ".rela__mcount_loc"
 		:  ".rel__mcount_loc";
-	unsigned const old_shnum = w2(ehdr->e_shnum);
 	uint_t const old_shoff = _w(ehdr->e_shoff);
+	Elf_Shdr *const shdr0 = (Elf_Shdr *)(old_shoff + (void *)ehdr);
+	unsigned const old_shnum = get_shnum(ehdr, shdr0);
 	uint_t const old_shstr_sh_size   = _w(shstr->sh_size);
 	uint_t const old_shstr_sh_offset = _w(shstr->sh_offset);
 	uint_t t = 1 + strlen(mc_name) + _w(shstr->sh_size);
@@ -198,6 +266,7 @@ static void append_func(Elf_Ehdr *const ehdr,
 
 	shstr->sh_size = _w(t);
 	shstr->sh_offset = _w(sb.st_size);
+	set_shnum(ehdr, shdr0, old_shnum + 2);
 	t += sb.st_size;
 	t += (_align & -t);  /* word-byte align */
 	new_e_shoff = t;
@@ -246,7 +315,6 @@ static void append_func(Elf_Ehdr *const ehdr,
 	uwrite(fd_map, mrel0, (void *)mrelp - (void *)mrel0);
 
 	ehdr->e_shoff = _w(new_e_shoff);
-	ehdr->e_shnum = w2(2 + w2(ehdr->e_shnum));  /* {.rel,}__mcount_loc */
 	ulseek(fd_map, 0, SEEK_SET);
 	uwrite(fd_map, ehdr, sizeof(*ehdr));
 }
@@ -416,6 +484,7 @@ static unsigned find_secsym_ndx(unsigned const txtndx,
 				char const *const txtname,
 				uint_t *const recvalp,
 				Elf_Shdr const *const symhdr,
+				Elf32_Word const *const extended_indices,
 				Elf_Ehdr const *const ehdr)
 {
 	Elf_Sym const *const sym0 = (Elf_Sym const *)(_w(symhdr->sh_offset)
@@ -427,7 +496,7 @@ static unsigned find_secsym_ndx(unsigned const txtndx,
 	for (symp = sym0, t = nsym; t; --t, ++symp) {
 		unsigned int const st_bind = ELF_ST_BIND(symp->st_info);
 
-		if (txtndx == w2(symp->st_shndx)
+		if (txtndx == get_symindex(symp, sym0, extended_indices)
 			/* avoid STB_WEAK */
 		    && (STB_LOCAL == st_bind || STB_GLOBAL == st_bind)) {
 			/* function symbols on ARM have quirks, avoid them */
@@ -502,8 +571,8 @@ do_func(Elf_Ehdr *const ehdr, char const *const fname, unsigned const reltype)
 {
 	Elf_Shdr *const shdr0 = (Elf_Shdr *)(_w(ehdr->e_shoff)
 		+ (void *)ehdr);
-	unsigned const nhdr = w2(ehdr->e_shnum);
-	Elf_Shdr *const shstr = &shdr0[w2(ehdr->e_shstrndx)];
+	unsigned const nhdr = get_shnum(ehdr, shdr0);
+	Elf_Shdr *const shstr = &shdr0[get_shstrndx(ehdr, shdr0)];
 	char const *const shstrtab = (char const *)(_w(shstr->sh_offset)
 		+ (void *)ehdr);
 
@@ -521,6 +590,9 @@ do_func(Elf_Ehdr *const ehdr, char const *const fname, unsigned const reltype)
 
 	unsigned rel_entsize = 0;
 	unsigned symsec_sh_link = 0;
+	Elf32_Word const *extended_indices;
+
+	find_symtab(ehdr, shdr0, nhdr, &extended_indices);
 
 	for (relhdr = shdr0, k = nhdr; k; --k, ++relhdr) {
 		char const *const txtname = has_rel_mcount(relhdr, shdr0,
@@ -530,6 +602,7 @@ do_func(Elf_Ehdr *const ehdr, char const *const fname, unsigned const reltype)
 			unsigned const recsym = find_secsym_ndx(
 				w(relhdr->sh_info), txtname, &recval,
 				&shdr0[symsec_sh_link = w(relhdr->sh_link)],
+				extended_indices,
 				ehdr);
 
 			rel_entsize = _w(relhdr->sh_entsize);

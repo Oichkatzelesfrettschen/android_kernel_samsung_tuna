@@ -99,6 +99,7 @@ ifeq ($(CONFIG_FUNCTION_TRACER),y)
 ORIG_CFLAGS := $(KBUILD_CFLAGS)
 KBUILD_CFLAGS = $(subst -pg, , $(ORIG_CFLAGS))
 endif
+KBUILD_CFLAGS += $(DISABLE_LTO)
 
 ccflags-y := -fpic -fno-builtin $(call cc-option,-fno-stack-protector)
 asflags-y := -Wa,-march=armv7-a$(plus_sec)

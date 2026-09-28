@@ -1,0 +1,41 @@
+menu "Tuna kernel link-time optimization"
+	depends on MACH_TUNA
+
+choice
+	prompt "Kernel link-time optimization mode"
+	default LTO_NONE
+	help
+	  Select the compiler and linker mode for the tuna kernel. The
+	  compressed boot wrapper and other standalone binaries stay native.
+
+config LTO_NONE
+	bool "Disable link-time optimization"
+
+config LTO_CLANG_THIN
+	bool "Clang ThinLTO"
+	help
+	  Build the tuna kernel with Clang bitcode and link it with LLD.
+	  The build requires LLVM= with a matching LLVM toolchain and
+	  LLVM_IAS=1; Kbuild checks those inputs before compiling.
+
+config LTO_CLANG_FULL
+	bool "Clang Full LTO (unqualified)"
+	depends on BROKEN
+	help
+	  Full LTO has no qualified ARM32 tuna build or device evidence.
+
+endchoice
+
+config LTO
+	bool
+	default y if LTO_CLANG_THIN || LTO_CLANG_FULL
+
+config LTO_CLANG
+	bool
+	default y if LTO_CLANG_THIN || LTO_CLANG_FULL
+
+config THINLTO
+	bool
+	default y if LTO_CLANG_THIN
+
+endmenu

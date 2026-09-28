@@ -237,6 +237,8 @@ static int
 is_mcounted_section_name(char const *const txtname)
 {
 	return strcmp(".text",           txtname) == 0 ||
+		strncmp(".text.",       txtname, 6) == 0 ||
+		strcmp(".init.text",     txtname) == 0 ||
 		strcmp(".ref.text",      txtname) == 0 ||
 		strcmp(".sched.text",    txtname) == 0 ||
 		strcmp(".spinlock.text", txtname) == 0 ||
@@ -247,6 +249,19 @@ is_mcounted_section_name(char const *const txtname)
 
 /* 32 bit and 64 bit are very similar */
 #include "recordmcount.h"
+
+/* ARM GOT references to mcount are data uses, not traced call sites. */
+static int arm_is_fake_mcount(Elf32_Rel const *relocation)
+{
+	switch (ELF32_R_TYPE(w(relocation->r_info))) {
+	case R_ARM_THM_PC22:
+	case R_ARM_CALL:
+	case R_ARM_PC24:
+		return 0;
+	}
+	return 1;
+}
+
 #define RECORD_MCOUNT_64
 #include "recordmcount.h"
 
@@ -337,8 +352,9 @@ do_file(char const *const fname)
 		ideal_nop = ideal_nop5_x86_32;
 		mcount_adjust_32 = -1;
 		break;
-	case EM_ARM:	 reltype = R_ARM_ABS32;
+case EM_ARM:	 reltype = R_ARM_ABS32;
 			 altmcount = "__gnu_mcount_nc";
+			 is_fake_mcount32 = arm_is_fake_mcount;
 			 break;
 	case EM_IA_64:	 reltype = R_IA64_IMM64;   gpfx = '_'; break;
 	case EM_MIPS:	 /* reltype: e_class    */ gpfx = '_'; break;
@@ -467,5 +483,3 @@ main(int argc, char *argv[])
 	}
 	return !!n_error;
 }
-
-

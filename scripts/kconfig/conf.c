@@ -24,6 +24,7 @@ enum input_mode {
 	oldaskconfig,
 	silentoldconfig,
 	oldconfig,
+	olddefconfig,
 	allnoconfig,
 	allyesconfig,
 	allmodconfig,
@@ -443,6 +444,7 @@ static void check_conf(struct menu *menu)
 static struct option long_opts[] = {
 	{"oldaskconfig",    no_argument,       NULL, oldaskconfig},
 	{"oldconfig",       no_argument,       NULL, oldconfig},
+	{"olddefconfig",    no_argument,       NULL, olddefconfig},
 	{"silentoldconfig", no_argument,       NULL, silentoldconfig},
 	{"defconfig",       optional_argument, NULL, defconfig},
 	{"savedefconfig",   required_argument, NULL, savedefconfig},
@@ -532,6 +534,7 @@ int main(int ac, char **av)
 	case silentoldconfig:
 	case oldaskconfig:
 	case oldconfig:
+	case olddefconfig:
 	case listnewconfig:
 	case oldnoconfig:
 		conf_read(NULL);
@@ -586,6 +589,7 @@ int main(int ac, char **av)
 		conf_set_all_new_symbols(def_mod);
 		break;
 	case alldefconfig:
+	case olddefconfig:
 		conf_set_all_new_symbols(def_default);
 		break;
 	case randconfig:

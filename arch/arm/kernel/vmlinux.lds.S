@@ -121,6 +121,9 @@ SECTIONS
 			SCHED_TEXT
 			LOCK_TEXT
 			KPROBES_TEXT
+#ifdef CONFIG_LTO_CLANG_THIN
+			*(.text.*)
+#endif
 #ifdef CONFIG_MMU
 			*(.fixup)
 #endif
@@ -210,6 +213,9 @@ SECTIONS
 		*(.data.rel.ro .data.rel.ro.*)
 #endif
 		CONSTRUCTORS
+#ifdef CONFIG_LTO_CLANG_THIN
+		*(.data.*)
+#endif
 
 		_edata = .;
 	}
@@ -274,6 +280,11 @@ SECTIONS
 
 	NOTES
 
+#ifdef __clang__
+	/* Reject relocation BSS before the ThinLTO BSS wildcard. */
+	.bss.rel.ro 0 : { *(.bss.rel.ro) }
+#endif
+
 	BSS_SECTION(0, 0, 0)
 	_end = .;
 
@@ -287,7 +298,6 @@ SECTIONS
 	.strtab 0 : { *(.strtab) }
 
 	/* A static kernel cannot resolve PLT calls or dynamic relocations. */
-	.bss.rel.ro 0 : { *(.bss.rel.ro) }
 	.got.plt 0 : { *(.got.plt) }
 	.rel.plt 0 : { *(.rel.plt) }
 	.rel.dyn 0 : { *(.rel.dyn) }

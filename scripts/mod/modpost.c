@@ -135,6 +135,9 @@ static struct module *new_module(char *modname)
 		if (strcmp(s, ".o") == 0) {
 			*s = '\0';
 			mod->is_dot_o = 1;
+			/* Native ThinLTO prelinks retain the original module name. */
+			if (s - p >= 4 && strcmp(s - 4, ".lto") == 0)
+				*(s - 4) = '\0';
 		}
 
 	/* add to list */
@@ -1739,9 +1742,18 @@ static void read_symbols(char *modname)
 	if (version)
 		maybe_frob_rcs_version(modname, version, info.modinfo,
 				       version - (char *)info.hdr);
-	if (version || (all_versions && !is_vmlinux(modname)))
-		get_src_version(modname, mod->srcversion,
+	if (version || (all_versions && !is_vmlinux(modname))) {
+		char *source_name = NOFAIL(strdup(modname));
+		char *suffix = strrchr(source_name, '.');
+
+		if (suffix && strcmp(suffix, ".o") == 0 &&
+		    suffix - source_name >= 4 &&
+		    strncmp(suffix - 4, ".lto", 4) == 0)
+			memmove(suffix - 4, suffix, 3);
+		get_src_version(source_name, mod->srcversion,
 				sizeof(mod->srcversion)-1);
+		free(source_name);
+	}
 
 	parse_elf_finish(&info);
 

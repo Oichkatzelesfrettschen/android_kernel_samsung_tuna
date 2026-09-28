@@ -28,16 +28,15 @@
 static void flush_pfn_alias(unsigned long pfn, unsigned long vaddr)
 {
 	unsigned long to = ALIAS_FLUSH_START + (CACHE_COLOUR(vaddr) << PAGE_SHIFT);
-	const int zero = 0;
 
 	set_pte_ext(TOP_PTE(to), pfn_pte(pfn, PAGE_KERNEL), 0);
 	flush_tlb_kernel_page(to);
 
-	asm(	"mcrr	p15, 0, %1, %0, c14\n"
-	"	mcr	p15, 0, %2, c7, c10, 4"
+	asm volatile("mcrr	p15, 0, %1, %0, c14"
 	    :
-	    : "r" (to), "r" (to + PAGE_SIZE - L1_CACHE_BYTES), "r" (zero)
-	    : "cc");
+	    : "r" (to), "r" (to + PAGE_SIZE - L1_CACHE_BYTES)
+	    : "cc", "memory");
+	dsb();
 }
 
 static void flush_icache_alias(unsigned long pfn, unsigned long vaddr, unsigned long len)
@@ -60,11 +59,11 @@ void flush_cache_mm(struct mm_struct *mm)
 	}
 
 	if (cache_is_vipt_aliasing()) {
-		asm(	"mcr	p15, 0, %0, c7, c14, 0\n"
-		"	mcr	p15, 0, %0, c7, c10, 4"
+		asm volatile("mcr	p15, 0, %0, c7, c14, 0"
 		    :
 		    : "r" (0)
-		    : "cc");
+		    : "cc", "memory");
+		dsb();
 	}
 }
 
@@ -76,11 +75,11 @@ void flush_cache_range(struct vm_area_struct *vma, unsigned long start, unsigned
 	}
 
 	if (cache_is_vipt_aliasing()) {
-		asm(	"mcr	p15, 0, %0, c7, c14, 0\n"
-		"	mcr	p15, 0, %0, c7, c10, 4"
+		asm volatile("mcr	p15, 0, %0, c7, c14, 0"
 		    :
 		    : "r" (0)
-		    : "cc");
+		    : "cc", "memory");
+		dsb();
 	}
 
 	if (vma->vm_flags & VM_EXEC)

@@ -2,7 +2,7 @@
 # Kernel configuration targets
 # These targets are used from top-level makefile
 
-PHONY += oldconfig xconfig gconfig menuconfig config silentoldconfig update-po-config \
+PHONY += oldconfig olddefconfig xconfig gconfig menuconfig config silentoldconfig update-po-config \
 	localmodconfig localyesconfig
 
 ifdef KBUILD_KCONFIG
@@ -27,6 +27,9 @@ nconfig: $(obj)/nconf
 	$< $(Kconfig)
 
 oldconfig: $(obj)/conf
+	$< --$@ $(Kconfig)
+
+olddefconfig: $(obj)/conf
 	$< --$@ $(Kconfig)
 
 silentoldconfig: $(obj)/conf

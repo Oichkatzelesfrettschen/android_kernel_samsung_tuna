@@ -74,7 +74,8 @@ expect_rejection "$temporary_directory/no-versions.ko" 'missing or empty __versi
 if "$readelf_tool" -SW "$module" | grep -F '.ARM.exidx.init.text' >/dev/null; then
 	"$objcopy_tool" --rename-section .ARM.exidx.init.text=.ARM.exidx.moved.text \
 		"$module" "$temporary_directory/unwind-mismatch.ko"
-	expect_rejection "$temporary_directory/unwind-mismatch.ko" 'expected .moved.text'
+	expect_rejection "$temporary_directory/unwind-mismatch.ko" \
+		'expected .moved.text' 'unmerged final section .ARM.exidx.moved.text'
 fi
 
 # LLVM objcopy preserves the relocation name independently of sh_info.

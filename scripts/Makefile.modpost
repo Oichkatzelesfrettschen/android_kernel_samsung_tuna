@@ -62,6 +62,11 @@ modulesymfile := $(firstword $(KBUILD_EXTMOD))/Module.symvers
 # Step 1), find all modules listed in $(MODVERDIR)/
 __modules := $(sort $(shell grep -h '\.ko' /dev/null $(wildcard $(MODVERDIR)/*.mod)))
 modules   := $(patsubst %.o,%.ko, $(wildcard $(__modules:.ko=.o)))
+ifeq ($(CONFIG_LTO_CLANG_THIN),y)
+modpost-objects := $(modules:.ko=.lto.o)
+else
+modpost-objects := $(modules:.ko=.o)
+endif
 
 # Stop after building .o files if NOFINAL is set. Makes compile tests quicker
 _modpost: $(if $(KBUILD_MODPOST_NOFINAL), $(modules:.ko:.o),$(modules))
@@ -87,8 +92,28 @@ quiet_cmd_modpost = MODPOST $(words $(filter-out vmlinux FORCE, $^)) modules
       cmd_modpost = $(modpost) -s
 
 PHONY += __modpost
-__modpost: $(modules:.ko=.o) FORCE
+__modpost: $(modpost-objects) FORCE
 	$(call cmd,modpost) $(wildcard vmlinux) $(filter-out FORCE,$^)
+
+ifeq ($(CONFIG_LTO_CLANG_THIN),y)
+quiet_cmd_lto_mod = LTO [M] $@
+      cmd_lto_mod = set -e; set --; \
+	if [ -s "$<.symversions" ]; then set -- -T "$<.symversions"; fi; \
+	mkdir -p .thinlto-cache; \
+	$(LD) $(LDFLAGS) -r --fatal-warnings --thinlto-jobs=2 \
+		--mllvm=-import-instr-limit=5 \
+		--thinlto-cache-dir=.thinlto-cache \
+		--thinlto-cache-policy=cache_size_bytes=8589934592:cache_size_files=10000 \
+		"$$@" -o $@ --whole-archive $< --no-whole-archive; \
+	$(if $(CONFIG_FTRACE_MCOUNT_RECORD),$(objtree)/scripts/recordmcount $@; ) \
+	$(PERL) $(srctree)/scripts/validate-module-sections.pl \
+		$(READELF) $@ --prelink
+
+$(modpost-objects): %.lto.o: %.o FORCE
+	$(call if_changed,lto_mod)
+
+targets += $(modpost-objects)
+endif
 
 quiet_cmd_kernel-mod = MODPOST $@
       cmd_kernel-mod = $(modpost) $@
@@ -107,7 +132,7 @@ $(modules:.ko=.mod.c): __modpost ;
 modname = $(notdir $(@:.mod.o=))
 
 quiet_cmd_cc_o_c = CC      $@
-      cmd_cc_o_c = $(CC) $(c_flags) $(KBUILD_CFLAGS_MODULE) $(CFLAGS_MODULE) \
+      cmd_cc_o_c = $(CC) $(c_flags) $(DISABLE_LTO) $(KBUILD_CFLAGS_MODULE) $(CFLAGS_MODULE) \
 		   -c -o $@ $<
 
 $(modules:.ko=.mod.o): %.mod.o: %.mod.c FORCE
@@ -126,7 +151,7 @@ quiet_cmd_ld_ko_o = LD [M]  $@
 		     $(PERL) $(srctree)/scripts/validate-module-sections.pl \
 		     $(READELF) $@ $(if $(CONFIG_MODVERSIONS),--modversions)
 
-$(modules): %.ko :%.o %.mod.o FORCE
+$(modules): %.ko :$(if $(CONFIG_LTO_CLANG_THIN),%.lto.o,%.o) %.mod.o FORCE
 	$(call if_changed,ld_ko_o)
 
 targets += $(modules)

@@ -223,6 +223,8 @@ config ARM_PATCH_PHYS_VIRT_16BIT
 
 source "init/Kconfig"
 
+source "arch/arm/Kconfig.lto"
+
 source "kernel/Kconfig.freezer"
 
 menu "System Type"

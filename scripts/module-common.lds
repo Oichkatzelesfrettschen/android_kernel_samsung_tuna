@@ -7,15 +7,26 @@ SECTIONS {
 	/DISCARD/ : { *(.discard) }
 
 	/* Preserve each module loader lifetime and its ARM unwind partner. */
-	.text			: { *(.text) }
-	.init.text		: { *(.init.text) }
-	.exit.text		: { *(.exit.text) }
-	.ARM.exidx.init.text	: { *(.ARM.exidx.init.text) }
-	.ARM.exidx.exit.text	: { *(.ARM.exidx.exit.text) }
-	.rodata			: { *(.rodata) }
-	.data			: { *(.data) }
+	.text			: { *(.text .text.*) }
+	.init.text		: { *(.init.text .init.text.*) }
+	.exit.text		: { *(.exit.text .exit.text.*) }
+	.devinit.text		: { *(.devinit.text .devinit.text.*) }
+	.devexit.text		: { *(.devexit.text .devexit.text.*) }
+	.ARM.exidx		: { *(.ARM.exidx .ARM.exidx.text .ARM.exidx.text.*) }
+	.ARM.exidx.init.text	: { *(.ARM.exidx.init.text .ARM.exidx.init.text.*) }
+	.ARM.exidx.exit.text	: { *(.ARM.exidx.exit.text .ARM.exidx.exit.text.*) }
+	.ARM.exidx.devinit.text : { *(.ARM.exidx.devinit.text .ARM.exidx.devinit.text.*) }
+	.ARM.exidx.devexit.text : { *(.ARM.exidx.devexit.text .ARM.exidx.devexit.text.*) }
+	.ARM.extab		: { *(.ARM.extab .ARM.extab.text .ARM.extab.text.*) }
+	.ARM.extab.init.text	: { *(.ARM.extab.init.text .ARM.extab.init.text.*) }
+	.ARM.extab.exit.text	: { *(.ARM.extab.exit.text .ARM.extab.exit.text.*) }
+	.ARM.extab.devinit.text : { *(.ARM.extab.devinit.text .ARM.extab.devinit.text.*) }
+	.ARM.extab.devexit.text : { *(.ARM.extab.devexit.text .ARM.extab.devexit.text.*) }
+	.rodata			: { *(.rodata .rodata.*) }
+	.data..percpu		: { *(.data..percpu .data..percpu.*) }
+	.data			: { *(.data .data.*) }
 	.sdata			: { *(.sdata) }
-	.bss			: { *(.bss) }
+	.bss			: { *(.bss .bss.*) }
 	.sbss			: { *(.sbss) }
 	__param			: { *(__param) }
 	.modinfo		: { *(.modinfo) }

@@ -653,6 +653,19 @@ endif
 
 include $(srctree)/arch/$(SRCARCH)/Makefile
 
+ifeq ($(CONFIG_LTO_CLANG_THIN),y)
+ifeq ($(LLVM),)
+$(error CONFIG_LTO_CLANG_THIN requires LLVM with a pinned Clang/LLD toolchain)
+endif
+ifneq ($(LLVM_IAS),1)
+$(error CONFIG_LTO_CLANG_THIN requires LLVM_IAS=1)
+endif
+CC_FLAGS_LTO := -flto=thin -fsplit-lto-unit
+DISABLE_LTO := -fno-lto
+KBUILD_CFLAGS += $(CC_FLAGS_LTO)
+export CC_FLAGS_LTO DISABLE_LTO
+endif
+
 ifneq ($(CONFIG_FRAME_WARN),0)
 KBUILD_CFLAGS += $(call cc-option,-Wframe-larger-than=${CONFIG_FRAME_WARN})
 endif
@@ -869,6 +882,43 @@ vmlinux-all  := $(vmlinux-init) $(vmlinux-main)
 vmlinux-lds  := arch/$(SRCARCH)/kernel/vmlinux.lds
 export KBUILD_VMLINUX_OBJS := $(vmlinux-all)
 
+ifeq ($(CONFIG_LTO_CLANG_THIN),y)
+# Relocatable ThinLTO runs once.  Kallsyms and the final link reuse native code.
+vmlinux-native-inputs = $(vmlinux-init) --start-group \
+	$(foreach input,$(vmlinux-main),$(if $(filter %.a,$(input)),\
+	--no-whole-archive $(input) --whole-archive,$(input))) --end-group
+vmlinux-symversion-inputs = $(foreach input,$(vmlinux-all),$(input).symversions)
+quiet_cmd_vmlinux__ = LD      $@
+      cmd_vmlinux__ = $(LD) $(LDFLAGS) $(LDFLAGS_vmlinux) -o $@ \
+	-T $(vmlinux-lds) vmlinux.o \
+	$(filter-out $(vmlinux-lds) $(vmlinux-init) $(vmlinux-main) vmlinux.o FORCE,$^)
+quiet_cmd_vmlinux-modpost = LTO     $@
+# Linux 3.0 genksyms omits softirq_work_list; the non-LTO ABI records CRC zero.
+      cmd_vmlinux-modpost = set -e; \
+	{ for input in $(vmlinux-symversion-inputs); do \
+		if [ -s "$$input" ]; then cat "$$input"; fi; \
+	done; } > vmlinux.symversions; \
+	if grep -q "^__crc_softirq_work_list " vmlinux.symversions; then \
+		echo "softirq_work_list gained a generated CRC; review its non-LTO ABI" >&2; \
+		exit 1; \
+	fi; \
+	echo "__crc_softirq_work_list = 0 ;" >> vmlinux.symversions; \
+	NM=$(NM) $(PERL) $(srctree)/scripts/generate-tuna-initcall-order.pl \
+		$(vmlinux-all) > vmlinux.initcalls.lds; \
+	mkdir -p .thinlto-cache; \
+	$(LD) $(LDFLAGS) -r --fatal-warnings --thinlto-jobs=2 \
+		--mllvm=-import-instr-limit=5 \
+		--thinlto-cache-dir=.thinlto-cache \
+		--thinlto-cache-policy=cache_size_bytes=8589934592:cache_size_files=10000 \
+		-T vmlinux.symversions -T vmlinux.initcalls.lds \
+		-o $@ --whole-archive $(vmlinux-native-inputs) --no-whole-archive; \
+	$(PERL) $(srctree)/scripts/validate-tuna-lto-prelink.pl $(READELF) $@; \
+	$(if $(CONFIG_FTRACE_MCOUNT_RECORD),\
+		scripts/recordmcount $@; \
+		$(PERL) $(srctree)/scripts/validate-tuna-lto-prelink.pl \
+			$(READELF) $@ --mcount)
+endif
+
 # Rule to link vmlinux - also used during CONFIG_KALLSYMS
 # May be overridden by arch/$(ARCH)/Makefile
 quiet_cmd_vmlinux__ ?= LD      $@
@@ -900,7 +950,7 @@ quiet_cmd_sysmap = SYSMAP
 # First command is ':' to allow us to use + in front of the rule
 define rule_vmlinux__
 	:
-	$(if $(CONFIG_KALLSYMS),,+$(call cmd,vmlinux_version))
+	$(if $(CONFIG_LTO_CLANG_THIN),,$(if $(CONFIG_KALLSYMS),,+$(call cmd,vmlinux_version)))
 
 	$(call cmd,vmlinux__)
 	$(Q)echo 'cmd_$@ := $(cmd_vmlinux__)' > $(@D)/.$(@F).cmd
@@ -961,7 +1011,7 @@ endef
 cmd_ksym_ld = $(cmd_vmlinux__)
 define rule_ksym_ld
 	: 
-	+$(call cmd,vmlinux_version)
+	$(if $(CONFIG_LTO_CLANG_THIN),,+$(call cmd,vmlinux_version))
 	$(call cmd,vmlinux__)
 	$(Q)echo 'cmd_$@ := $(cmd_vmlinux__)' > $(@D)/.$(@F).cmd
 endef
@@ -1004,12 +1054,15 @@ endif # ifdef CONFIG_KALLSYMS
 
 # Do modpost on a prelinked vmlinux. The finally linked vmlinux has
 # relevant sections renamed as per the linker script.
+ifneq ($(CONFIG_LTO_CLANG_THIN),y)
 quiet_cmd_vmlinux-modpost = LD      $@
       cmd_vmlinux-modpost = $(LD) $(LDFLAGS) -r -o $@                          \
 	 $(vmlinux-init) --start-group $(vmlinux-main) --end-group             \
 	 $(filter-out $(vmlinux-init) $(vmlinux-main) FORCE ,$^)
+endif
 define rule_vmlinux-modpost
 	:
+	$(if $(CONFIG_LTO_CLANG_THIN),+$(call cmd,vmlinux_version))
 	+$(call cmd,vmlinux-modpost)
 	$(Q)$(MAKE) -f $(srctree)/scripts/Makefile.modpost $@
 	$(Q)echo 'cmd_$@ := $(cmd_vmlinux-modpost)' > $(dot-target).cmd
@@ -1035,7 +1088,7 @@ ifdef CONFIG_KALLSYMS
 .tmp_vmlinux1: vmlinux.o
 endif
 
-modpost-init := $(filter-out init/built-in.o, $(vmlinux-init))
+modpost-init := $(if $(CONFIG_LTO_CLANG_THIN),$(vmlinux-init),$(filter-out init/built-in.o, $(vmlinux-init)))
 vmlinux.o: $(modpost-init) $(vmlinux-main) FORCE
 	$(call if_changed_rule,vmlinux-modpost)
 
@@ -1264,7 +1317,8 @@ endif # CONFIG_MODULES
 # Directories & files removed with 'make clean'
 CLEAN_DIRS  += $(MODVERDIR)
 CLEAN_FILES +=	vmlinux System.map \
-                .tmp_kallsyms* .tmp_version .tmp_vmlinux* .tmp_System.map
+				.tmp_kallsyms* .tmp_version .tmp_vmlinux* .tmp_System.map \
+				vmlinux.initcalls.lds vmlinux.symversions
 
 # Directories & files removed with 'make mrproper'
 MRPROPER_DIRS  += include/config usr/include include/generated          \
@@ -1519,9 +1573,11 @@ clean: $(clean-dirs)
 		\( -name '*.[oas]' -o -name '*.ko' -o -name '.*.cmd' \
 		-o -name '*.ko.*' \
 		-o -name '.*.d' -o -name '.*.tmp' -o -name '*.mod.c' \
-		-o -name '*.symtypes' -o -name 'modules.order' \
+		-o -name '*.symtypes' -o -name '*.symversions' \
+		-o -name 'modules.order' \
 		-o -name modules.builtin -o -name '.tmp_*.o.*' \
 		-o -name '*.gcno' \) -type f -print | xargs rm -f
+	$(if $(KBUILD_EXTMOD),,@if [ -d .thinlto-cache ]; then find .thinlto-cache -depth -delete; fi)
 
 # Generate tags for editors
 # ---------------------------------------------------------------------------
