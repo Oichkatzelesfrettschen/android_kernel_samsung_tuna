@@ -100,7 +100,8 @@ thinlto_module_cache := $(if $(KBUILD_EXTMOD),$(firstword $(KBUILD_EXTMOD))/.thi
 thinlto_module_sources := $(srctree)/scripts/validate-module-sections.pl
 ifeq ($(CONFIG_FTRACE_MCOUNT_RECORD),y)
 thinlto_module_sources += $(srctree)/scripts/recordmcount.c \
-	$(srctree)/scripts/recordmcount.h
+	$(srctree)/scripts/recordmcount.h \
+	$(objtree)/scripts/recordmcount
 endif
 quiet_cmd_lto_mod = LTO [M] $@
       cmd_lto_mod = set -e; set --; \

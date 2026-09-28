@@ -953,7 +953,7 @@ define rule_vmlinux__
 	$(if $(CONFIG_LTO_CLANG_THIN),,$(if $(CONFIG_KALLSYMS),,+$(call cmd,vmlinux_version)))
 
 	$(call cmd,vmlinux__)
-	$(Q)echo 'cmd_$@ := $(cmd_vmlinux__)' > $(@D)/.$(@F).cmd
+	$(Q)echo 'cmd_$@ := $(call make-cmd,vmlinux__)' > $(@D)/.$(@F).cmd
 
 	$(Q)$(if $($(quiet)cmd_sysmap),                                      \
 	  echo '  $($(quiet)cmd_sysmap)  System.map' &&)                     \
@@ -1013,7 +1013,7 @@ define rule_ksym_ld
 	: 
 	$(if $(CONFIG_LTO_CLANG_THIN),,+$(call cmd,vmlinux_version))
 	$(call cmd,vmlinux__)
-	$(Q)echo 'cmd_$@ := $(cmd_vmlinux__)' > $(@D)/.$(@F).cmd
+	$(Q)echo 'cmd_$@ := $(call make-cmd,vmlinux__)' > $(@D)/.$(@F).cmd
 endef
 
 # Generate .S file with all kernel symbols
@@ -1065,7 +1065,7 @@ define rule_vmlinux-modpost
 	$(if $(CONFIG_LTO_CLANG_THIN),+$(call cmd,vmlinux_version))
 	+$(call cmd,vmlinux-modpost)
 	$(Q)$(MAKE) -f $(srctree)/scripts/Makefile.modpost $@
-	$(Q)echo 'cmd_$@ := $(cmd_vmlinux-modpost)' > $(dot-target).cmd
+	$(Q)echo 'cmd_$@ := $(call make-cmd,vmlinux-modpost)' > $(dot-target).cmd
 endef
 
 # vmlinux image - including updated kernel symbols
@@ -1093,7 +1093,14 @@ thinlto-prelink-sources := $(srctree)/scripts/generate-tuna-initcall-order.pl \
 	$(srctree)/scripts/validate-tuna-lto-prelink.pl
 ifeq ($(CONFIG_FTRACE_MCOUNT_RECORD),y)
 thinlto-prelink-sources += $(srctree)/scripts/recordmcount.c \
-	$(srctree)/scripts/recordmcount.h
+	$(srctree)/scripts/recordmcount.h \
+	$(objtree)/scripts/recordmcount
+endif
+
+# The prelink needs the built helper before its timestamp can be checked.
+ifeq ($(CONFIG_LTO_CLANG_THIN)$(CONFIG_FTRACE_MCOUNT_RECORD),yy)
+$(objtree)/scripts/recordmcount: | scripts
+	$(Q)test -x $@
 endif
 
 vmlinux.o: $(modpost-init) $(vmlinux-main) \
