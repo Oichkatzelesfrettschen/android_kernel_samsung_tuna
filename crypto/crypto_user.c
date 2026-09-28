@@ -40,15 +40,12 @@ struct crypto_dump_info {
 
 static struct crypto_alg *crypto_alg_match(struct crypto_user_alg *p, int exact)
 {
-	int match;
 	struct crypto_alg *q, *alg = NULL;
 
 	down_read(&crypto_alg_sem);
 
-	if (list_empty(&crypto_alg_list))
-		return NULL;
-
 	list_for_each_entry(q, &crypto_alg_list, cra_list) {
+		int match = 0;
 
 		if ((q->cra_flags ^ p->cru_type) & p->cru_mask)
 			continue;
