@@ -1089,7 +1089,15 @@ ifdef CONFIG_KALLSYMS
 endif
 
 modpost-init := $(if $(CONFIG_LTO_CLANG_THIN),$(vmlinux-init),$(filter-out init/built-in.o, $(vmlinux-init)))
-vmlinux.o: $(modpost-init) $(vmlinux-main) FORCE
+thinlto-prelink-sources := $(srctree)/scripts/generate-tuna-initcall-order.pl \
+	$(srctree)/scripts/validate-tuna-lto-prelink.pl
+ifeq ($(CONFIG_FTRACE_MCOUNT_RECORD),y)
+thinlto-prelink-sources += $(srctree)/scripts/recordmcount.c \
+	$(srctree)/scripts/recordmcount.h
+endif
+
+vmlinux.o: $(modpost-init) $(vmlinux-main) \
+	$(if $(CONFIG_LTO_CLANG_THIN),$(thinlto-prelink-sources)) FORCE
 	$(call if_changed_rule,vmlinux-modpost)
 
 # The actual objects are generated when descending, 
@@ -1577,7 +1585,9 @@ clean: $(clean-dirs)
 		-o -name 'modules.order' \
 		-o -name modules.builtin -o -name '.tmp_*.o.*' \
 		-o -name '*.gcno' \) -type f -print | xargs rm -f
-	$(if $(KBUILD_EXTMOD),,@if [ -d .thinlto-cache ]; then find .thinlto-cache -depth -delete; fi)
+	@if [ -d "$(if $(KBUILD_EXTMOD),$(firstword $(KBUILD_EXTMOD))/.thinlto-cache,.thinlto-cache)" ]; then \
+		find "$(if $(KBUILD_EXTMOD),$(firstword $(KBUILD_EXTMOD))/.thinlto-cache,.thinlto-cache)" -depth -delete; \
+	fi
 
 # Generate tags for editors
 # ---------------------------------------------------------------------------

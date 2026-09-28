@@ -96,20 +96,26 @@ __modpost: $(modpost-objects) FORCE
 	$(call cmd,modpost) $(wildcard vmlinux) $(filter-out FORCE,$^)
 
 ifeq ($(CONFIG_LTO_CLANG_THIN),y)
+thinlto_module_cache := $(if $(KBUILD_EXTMOD),$(firstword $(KBUILD_EXTMOD))/.thinlto-cache,$(objtree)/.thinlto-cache)
+thinlto_module_sources := $(srctree)/scripts/validate-module-sections.pl
+ifeq ($(CONFIG_FTRACE_MCOUNT_RECORD),y)
+thinlto_module_sources += $(srctree)/scripts/recordmcount.c \
+	$(srctree)/scripts/recordmcount.h
+endif
 quiet_cmd_lto_mod = LTO [M] $@
       cmd_lto_mod = set -e; set --; \
 	if [ -s "$<.symversions" ]; then set -- -T "$<.symversions"; fi; \
-	mkdir -p .thinlto-cache; \
+	mkdir -p "$(thinlto_module_cache)"; \
 	$(LD) $(LDFLAGS) -r --fatal-warnings --thinlto-jobs=2 \
 		--mllvm=-import-instr-limit=5 \
-		--thinlto-cache-dir=.thinlto-cache \
+		--thinlto-cache-dir="$(thinlto_module_cache)" \
 		--thinlto-cache-policy=cache_size_bytes=8589934592:cache_size_files=10000 \
 		"$$@" -o $@ --whole-archive $< --no-whole-archive; \
 	$(if $(CONFIG_FTRACE_MCOUNT_RECORD),$(objtree)/scripts/recordmcount $@; ) \
 	$(PERL) $(srctree)/scripts/validate-module-sections.pl \
 		$(READELF) $@ --prelink
 
-$(modpost-objects): %.lto.o: %.o FORCE
+$(modpost-objects): %.lto.o: %.o $(thinlto_module_sources) FORCE
 	$(call if_changed,lto_mod)
 
 targets += $(modpost-objects)
@@ -147,11 +153,15 @@ module_ldflags = $(if $(LLVM),$(filter-out --orphan-handling=warn,$(KBUILD_LDFLA
 quiet_cmd_ld_ko_o = LD [M]  $@
       cmd_ld_ko_o = $(LD) -r $(LDFLAGS)                                 \
                              $(module_ldflags) $(LDFLAGS_MODULE)       \
-                             -o $@ $(filter-out FORCE,$^) &&           \
+                             -o $@ $(filter-out FORCE \
+			$(srctree)/scripts/module-common.lds \
+			$(srctree)/scripts/validate-module-sections.pl,$^) && \
 		     $(PERL) $(srctree)/scripts/validate-module-sections.pl \
 		     $(READELF) $@ $(if $(CONFIG_MODVERSIONS),--modversions)
 
-$(modules): %.ko :$(if $(CONFIG_LTO_CLANG_THIN),%.lto.o,%.o) %.mod.o FORCE
+$(modules): %.ko :$(if $(CONFIG_LTO_CLANG_THIN),%.lto.o,%.o) %.mod.o \
+	$(srctree)/scripts/module-common.lds \
+	$(srctree)/scripts/validate-module-sections.pl FORCE
 	$(call if_changed,ld_ko_o)
 
 targets += $(modules)
