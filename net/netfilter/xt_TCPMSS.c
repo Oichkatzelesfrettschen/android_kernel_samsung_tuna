@@ -58,11 +58,13 @@ tcpmss_mangle_packet(struct sk_buff *skb,
 	if (!skb_make_writable(skb, skb->len))
 		return -1;
 
+	if (tcphoff > skb->len || skb->len - tcphoff < sizeof(struct tcphdr))
+		return -1;
 	tcplen = skb->len - tcphoff;
 	tcph = (struct tcphdr *)(skb_network_header(skb) + tcphoff);
 
-	/* Header cannot be larger than the packet */
-	if (tcplen < tcph->doff*4)
+	/* The TCP data offset must describe a header inside the packet. */
+	if (tcplen < tcph->doff*4 || tcph->doff*4 < sizeof(struct tcphdr))
 		return -1;
 
 	if (info->mss == XT_TCPMSS_CLAMP_PMTU) {
@@ -83,9 +85,9 @@ tcpmss_mangle_packet(struct sk_buff *skb,
 		newmss = info->mss;
 
 	opt = (u_int8_t *)tcph;
-	for (i = sizeof(struct tcphdr); i < tcph->doff*4; i += optlen(opt, i)) {
-		if (opt[i] == TCPOPT_MSS && tcph->doff*4 - i >= TCPOLEN_MSS &&
-		    opt[i+1] == TCPOLEN_MSS) {
+	for (i = sizeof(struct tcphdr); i <= tcph->doff*4 - TCPOLEN_MSS;
+	     i += optlen(opt, i)) {
+		if (opt[i] == TCPOPT_MSS && opt[i+1] == TCPOLEN_MSS) {
 			u_int16_t oldmss;
 
 			oldmss = (opt[i+2] << 8) | opt[i+3];
@@ -111,6 +113,10 @@ tcpmss_mangle_packet(struct sk_buff *skb,
 	   without moving it, and doing so may make the SYN packet
 	   itself too large. Accept the packet unmodified instead. */
 	if (tcplen > tcph->doff*4)
+		return 0;
+
+	/* The 4-bit data offset cannot encode another 4-byte option. */
+	if (tcph->doff >= 15)
 		return 0;
 
 	/*
