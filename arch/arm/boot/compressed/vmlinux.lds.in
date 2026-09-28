@@ -38,6 +38,8 @@ SECTIONS
     *(.rodata.*)
     *(.glue_7)
     *(.glue_7t)
+    *(.v4_bx)
+    *(.vfp11_veneer)
     *(.piggydata)
     . = ALIGN(4);
   }
@@ -65,6 +67,7 @@ SECTIONS
   .stab.index 0		: { *(.stab.index) }
   .stab.indexstr 0	: { *(.stab.indexstr) }
   .comment 0		: { *(.comment) }
+  .note.GNU-stack 0	: { *(.note.GNU-stack) }
   .ARM.attributes 0	: { *(.ARM.attributes) }
   .symtab 0		: { *(.symtab) }
   .symtab_shndx 0	: { *(.symtab_shndx) }
@@ -73,14 +76,20 @@ SECTIONS
 
   /* The decompressor runs without a dynamic linker. */
   .bss.rel.ro 0		: { *(.bss.rel.ro) }
+  .igot.plt 0		: { *(.igot.plt) }
+  .rel.got 0		: { *(.rel.got) }
   .rel.plt 0		: { *(.rel.plt) }
+  .rel.iplt 0		: { *(.rel.iplt) }
   .rel.dyn 0		: { *(.rel.dyn) }
   .plt 0		: { *(.plt) }
   .iplt 0		: { *(.iplt) }
 }
 
 ASSERT(SIZEOF(.bss.rel.ro) == 0, "unexpected relocation BSS")
+ASSERT(SIZEOF(.igot.plt) == 0, "unexpected indirect GOT PLT")
+ASSERT(SIZEOF(.rel.got) == 0, "unexpected GOT relocations")
 ASSERT(SIZEOF(.rel.plt) == 0, "unexpected PLT relocations")
+ASSERT(SIZEOF(.rel.iplt) == 0, "unexpected indirect PLT relocations")
 ASSERT(SIZEOF(.rel.dyn) == 0, "unexpected dynamic relocations")
 ASSERT(SIZEOF(.plt) == 0, "unexpected PLT")
 ASSERT(SIZEOF(.iplt) == 0, "unexpected indirect PLT")

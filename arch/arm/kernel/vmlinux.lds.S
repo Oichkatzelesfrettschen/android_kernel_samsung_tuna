@@ -115,9 +115,7 @@ SECTIONS
 			__exception_text_end = .;
 			IRQENTRY_TEXT
 			TEXT_TEXT
-#ifdef __clang__
 			*(.text.fastpath)
-#endif
 			SCHED_TEXT
 			LOCK_TEXT
 			KPROBES_TEXT
@@ -132,6 +130,8 @@ SECTIONS
 			*(.rodata.*)
 			*(.glue_7)
 			*(.glue_7t)
+			*(.v4_bx)
+			*(.vfp11_veneer)
 		. = ALIGN(4);
 		*(.got)			/* Global offset table		*/
 			ARM_CPU_KEEP(PROC_INFO)
@@ -209,9 +209,7 @@ SECTIONS
 		 * and the usual data section
 		 */
 		DATA_DATA
-#ifdef __clang__
-		*(.data.rel.ro .data.rel.ro.*)
-#endif
+		*(.data.rel .data.rel.*)
 		CONSTRUCTORS
 #ifdef CONFIG_LTO_CLANG_THIN
 		*(.data.*)
@@ -280,30 +278,31 @@ SECTIONS
 
 	NOTES
 
-#ifdef __clang__
 	/* Reject relocation BSS before the ThinLTO BSS wildcard. */
 	.bss.rel.ro 0 : { *(.bss.rel.ro) }
-#endif
 
 	BSS_SECTION(0, 0, 0)
 	_end = .;
 
 	STABS_DEBUG
 	.comment 0 : { *(.comment) }
-#ifdef __clang__
 	.ARM.attributes 0 : { *(.ARM.attributes) }
+#ifdef __clang__
 	.symtab 0 : { *(.symtab) }
 	.symtab_shndx 0 : { *(.symtab_shndx) }
 	.shstrtab 0 : { *(.shstrtab) }
 	.strtab 0 : { *(.strtab) }
 
+#endif
 	/* A static kernel cannot resolve PLT calls or dynamic relocations. */
 	.got.plt 0 : { *(.got.plt) }
+	.igot.plt 0 : { *(.igot.plt) }
+	.rel.got 0 : { *(.rel.got) }
 	.rel.plt 0 : { *(.rel.plt) }
+	.rel.iplt 0 : { *(.rel.iplt) }
 	.rel.dyn 0 : { *(.rel.dyn) }
 	.plt 0 : { *(.plt) }
 	.iplt 0 : { *(.iplt) }
-#endif
 
 	/* Default discards */
 	DISCARDS
@@ -325,11 +324,13 @@ SECTIONS
  */
 ASSERT((__proc_info_end - __proc_info_begin), "missing CPU support")
 ASSERT((__arch_info_end - __arch_info_begin), "no machine record defined")
-#ifdef __clang__
 ASSERT(SIZEOF(.bss.rel.ro) == 0, "unexpected relocation BSS")
-ASSERT(SIZEOF(.got.plt) == 0, "unexpected GOT PLT")
+/* GNU ARM ld reserves three zero GOT PLT words without emitting a PLT. */
+ASSERT(SIZEOF(.got.plt) == 0 || SIZEOF(.got.plt) == 12, "unexpected GOT PLT")
+ASSERT(SIZEOF(.igot.plt) == 0, "unexpected indirect GOT PLT")
+ASSERT(SIZEOF(.rel.got) == 0, "unexpected GOT relocations")
 ASSERT(SIZEOF(.rel.plt) == 0, "unexpected PLT relocations")
+ASSERT(SIZEOF(.rel.iplt) == 0, "unexpected indirect PLT relocations")
 ASSERT(SIZEOF(.rel.dyn) == 0, "unexpected dynamic relocations")
 ASSERT(SIZEOF(.plt) == 0, "unexpected PLT")
 ASSERT(SIZEOF(.iplt) == 0, "unexpected indirect PLT")
-#endif
