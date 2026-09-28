@@ -118,7 +118,9 @@ for my $section (@sections) {
 		check_section($section, 'PROGBITS', 'WA', 'X');
 	} elsif ($name eq '__mcount_loc') {
 		check_section($section, 'PROGBITS', 'A', 'WX');
-		$section->{entry_size} == 4 && $section->{alignment} >= 4 &&
+		# The module loader counts pointers from sh_size; GNU ld leaves sh_entsize zero.
+		($section->{entry_size} == 0 || $section->{entry_size} == 4) &&
+		$section->{alignment} >= 4 &&
 		$section->{size} > 0 && $section->{size} % 4 == 0
 			or die "$module: invalid __mcount_loc entry layout\n";
 	} elsif ($name eq '__trace_printk_fmt') {
