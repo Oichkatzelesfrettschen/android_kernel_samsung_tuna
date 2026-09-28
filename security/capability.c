@@ -12,22 +12,22 @@
 
 #include <linux/security.h>
 
-static int cap_binder_set_context_mgr(struct task_struct *mgr)
+static int cap_binder_set_context_mgr(const struct cred *mgr)
 {
 	return 0;
 }
 
-static int cap_binder_transaction(struct task_struct *from, struct task_struct *to)
+static int cap_binder_transaction(const struct cred *from, const struct cred *to)
 {
 	return 0;
 }
 
-static int cap_binder_transfer_binder(struct task_struct *from, struct task_struct *to)
+static int cap_binder_transfer_binder(const struct cred *from, const struct cred *to)
 {
 	return 0;
 }
 
-static int cap_binder_transfer_file(struct task_struct *from, struct task_struct *to, struct file *file)
+static int cap_binder_transfer_file(const struct cred *from, const struct cred *to, struct file *file)
 {
 	return 0;
 }
@@ -433,6 +433,11 @@ static int cap_task_getsid(struct task_struct *p)
 }
 
 static void cap_task_getsecid(struct task_struct *p, u32 *secid)
+{
+	*secid = 0;
+}
+
+static void cap_cred_getsecid(const struct cred *cred, u32 *secid)
 {
 	*secid = 0;
 }
@@ -997,6 +1002,7 @@ void __init security_fixup_ops(struct security_operations *ops)
 	set_to_cap_if_null(ops, task_getpgid);
 	set_to_cap_if_null(ops, task_getsid);
 	set_to_cap_if_null(ops, task_getsecid);
+	set_to_cap_if_null(ops, cred_getsecid);
 	set_to_cap_if_null(ops, task_setnice);
 	set_to_cap_if_null(ops, task_setioprio);
 	set_to_cap_if_null(ops, task_getioprio);
