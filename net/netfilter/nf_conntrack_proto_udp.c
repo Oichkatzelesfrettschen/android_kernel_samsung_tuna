@@ -58,7 +58,7 @@ static bool udp_invert_tuple(struct nf_conntrack_tuple *tuple,
 static int udp_print_tuple(struct seq_file *s,
 			   const struct nf_conntrack_tuple *tuple)
 {
-	return seq_printf(s, "sport=%hu dport=%hu ",
+	return seq_printf(s, "sport=%d dport=%d ",
 			  ntohs(tuple->src.u.udp.port),
 			  ntohs(tuple->dst.u.udp.port));
 }

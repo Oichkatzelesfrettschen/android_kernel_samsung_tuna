@@ -158,7 +158,7 @@ xt_socket_get4_sk(const struct sk_buff *skb, struct xt_action_param *par)
 	sk = nf_tproxy_get_sock_v4(dev_net(skb->dev), protocol,
 				   saddr, daddr, sport, dport, par->in, NFT_LOOKUP_ANY);
 
-	pr_debug("proto %hhu %pI4:%hu -> %pI4:%hu (orig %pI4:%hu) sock %p\n",
+	pr_debug("proto %hhu %pI4:%d -> %pI4:%d (orig %pI4:%d) sock %p\n",
 		 protocol, &saddr, ntohs(sport),
 		 &daddr, ntohs(dport),
 		 &iph->daddr, hp ? ntohs(hp->dest) : 0, sk);
@@ -302,8 +302,8 @@ xt_socket_get6_sk(const struct sk_buff *skb, struct xt_action_param *par)
 
 	sk = nf_tproxy_get_sock_v6(dev_net(skb->dev), tproto,
 				   saddr, daddr, sport, dport, par->in, NFT_LOOKUP_ANY);
-	pr_debug("proto %hhd %pI6:%hu -> %pI6:%hu "
-		 "(orig %pI6:%hu) sock %p\n",
+	pr_debug("proto %d %pI6:%d -> %pI6:%d "
+		 "(orig %pI6:%d) sock %p\n",
 		 tproto, saddr, ntohs(sport),
 		 daddr, ntohs(dport),
 		 &iph->daddr, hp ? ntohs(hp->dest) : 0, sk);
