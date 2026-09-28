@@ -63,7 +63,7 @@ struct pnpipehdr {
 		u8		state_after_reset;	/* reset request */
 		u8		error_code;		/* any response */
 		u8		pep_type;		/* status indication */
-		u8		data[1];
+		u8		data[0];
 	};
 };
 #define other_pep_type		data[1]
