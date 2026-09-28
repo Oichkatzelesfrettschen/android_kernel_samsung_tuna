@@ -1230,8 +1230,8 @@ static ssize_t bin_dn_node_address(struct file *file,
 			goto out;
 
 		len = snprintf(buf, sizeof(buf), "%hu.%hu",
-				le16_to_cpu(dnaddr) >> 10,
-				le16_to_cpu(dnaddr) & 0x3ff);
+				(unsigned short)(le16_to_cpu(dnaddr) >> 10),
+				(unsigned short)(le16_to_cpu(dnaddr) & 0x3ff));
 
 		set_fs(KERNEL_DS);
 		result = vfs_write(file, buf, len, &pos);
