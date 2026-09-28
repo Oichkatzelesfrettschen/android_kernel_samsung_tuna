@@ -390,7 +390,9 @@ static inline int xfrm_replay_verify_len(struct xfrm_replay_state_esn *replay_es
 	up = nla_data(rp);
 	ulen = xfrm_replay_state_esn_len(up);
 
-	if (nla_len(rp) < ulen || xfrm_replay_state_esn_len(replay_esn) != ulen)
+	if (nla_len(rp) < ulen ||
+	    xfrm_replay_state_esn_len(replay_esn) != ulen ||
+	    replay_esn->bmp_len != up->bmp_len)
 		return -EINVAL;
 
 	if (up->replay_window > up->bmp_len * sizeof(__u32) * 8)
@@ -473,7 +475,7 @@ static void xfrm_update_ae_params(struct xfrm_state *x, struct nlattr **attrs,
 	struct nlattr *et = attrs[XFRMA_ETIMER_THRESH];
 	struct nlattr *rt = attrs[XFRMA_REPLAY_THRESH];
 
-	if (re) {
+	if (re && x->replay_esn && x->preplay_esn) {
 		struct xfrm_replay_state_esn *replay_esn;
 		replay_esn = nla_data(re);
 		memcpy(x->replay_esn, replay_esn,
@@ -1238,10 +1240,13 @@ static void copy_templates(struct xfrm_policy *xp, struct xfrm_user_tmpl *ut,
 
 static int validate_tmpl(int nr, struct xfrm_user_tmpl *ut, u16 family)
 {
+	u16 prev_family;
 	int i;
 
 	if (nr > XFRM_MAX_DEPTH)
 		return -EINVAL;
+
+	prev_family = family;
 
 	for (i = 0; i < nr; i++) {
 		/* We never validated the ut->family value, so many
@@ -1253,6 +1258,15 @@ static int validate_tmpl(int nr, struct xfrm_user_tmpl *ut, u16 family)
 		 */
 		if (!ut[i].family)
 			ut[i].family = family;
+
+		if (ut[i].mode >= XFRM_MODE_MAX)
+			return -EINVAL;
+
+		if (ut[i].mode == XFRM_MODE_TRANSPORT &&
+		    ut[i].family != prev_family)
+			return -EINVAL;
+
+		prev_family = ut[i].family;
 
 		switch (ut[i].family) {
 		case AF_INET:
@@ -1523,7 +1537,8 @@ static int xfrm_dump_policy_done(struct netlink_callback *cb)
 {
 	struct xfrm_policy_walk *walk = (struct xfrm_policy_walk *) &cb->args[1];
 
-	xfrm_policy_walk_done(walk);
+	if (cb->args[0])
+		xfrm_policy_walk_done(walk);
 	return 0;
 }
 
@@ -1558,6 +1573,10 @@ static struct sk_buff *xfrm_policy_netlink(struct sk_buff *in_skb,
 	struct xfrm_dump_info info;
 	struct sk_buff *skb;
 	int err;
+
+	err = verify_policy_dir(dir);
+	if (err)
+		return ERR_PTR(err);
 
 	skb = nlmsg_new(NLMSG_DEFAULT_SIZE, GFP_KERNEL);
 	if (!skb)
@@ -1819,7 +1838,7 @@ static int xfrm_new_ae(struct sk_buff *skb, struct nlmsghdr *nlh,
 	if (x->km.state != XFRM_STATE_VALID)
 		goto out;
 
-	err = xfrm_replay_verify_len(x->replay_esn, rp);
+	err = xfrm_replay_verify_len(x->replay_esn, re);
 	if (err)
 		goto out;
 
@@ -2092,6 +2111,10 @@ static int xfrm_do_migrate(struct sk_buff *skb, struct nlmsghdr *nlh,
 	int err;
 	int n = 0;
 
+	err = verify_policy_dir(pi->dir);
+	if (err)
+		return err;
+
 	if (attrs[XFRMA_MIGRATE] == NULL)
 		return -EINVAL;
 
@@ -2202,6 +2225,11 @@ static int xfrm_send_migrate(const struct xfrm_selector *sel, u8 dir, u8 type,
 {
 	struct net *net = &init_net;
 	struct sk_buff *skb;
+	int err;
+
+	err = verify_policy_dir(dir);
+	if (err)
+		return err;
 
 	skb = nlmsg_new(xfrm_migrate_msgsize(num_migrate, !!k), GFP_ATOMIC);
 	if (skb == NULL)
@@ -2822,6 +2850,11 @@ nlmsg_failure:
 
 static int xfrm_send_policy_notify(struct xfrm_policy *xp, int dir, const struct km_event *c)
 {
+	int err;
+
+	err = verify_policy_dir(dir);
+	if (err)
+		return err;
 
 	switch (c->event) {
 	case XFRM_MSG_NEWPOLICY:
