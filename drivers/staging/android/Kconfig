@@ -105,6 +105,18 @@ config ANDROID_RAM_CONSOLE_EARLY_SIZE
 	default 0
 	depends on ANDROID_RAM_CONSOLE_EARLY_INIT
 
+config ANDROID_RAM_CONSOLE_EARLY_PHYS
+	hex "Android RAM console physical address for early init"
+	default 0
+	depends on ANDROID_RAM_CONSOLE_EARLY_INIT
+	help
+	  A nonzero value makes the console_initcall map this physical
+	  buffer with ioremap() instead of using
+	  ANDROID_RAM_CONSOLE_EARLY_ADDR. Set it to the region the board
+	  reserves for the RAM console, so a boot that stops before the
+	  platform device registers still leaves its log in the buffer the
+	  next kernel reads as /proc/last_kmsg.
+
 config ANDROID_TIMED_OUTPUT
 	bool "Timed output class driver"
 	default y
