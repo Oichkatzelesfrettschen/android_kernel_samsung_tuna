@@ -531,6 +531,25 @@ struct kobject *kobject_get(struct kobject *kobj)
 	return kobj;
 }
 
+/**
+ * kobject_get_unless_zero - increment refcount for object unless it is zero.
+ * @kobj: object.
+ *
+ * Returns @kobj with its reference count raised, or NULL when @kobj is NULL
+ * or the count had already dropped to zero and the object is being
+ * released. A lookup that finds the object through a pointer that the
+ * release path clears later uses this form so it never revives a dying
+ * object.
+ */
+struct kobject * __must_check kobject_get_unless_zero(struct kobject *kobj)
+{
+	if (!kobj)
+		return NULL;
+	if (!kref_get_unless_zero(&kobj->kref))
+		kobj = NULL;
+	return kobj;
+}
+
 /*
  * kobject_cleanup - free kobject resources.
  * @kobj: object to cleanup
@@ -997,6 +1016,7 @@ void kobj_ns_drop(enum kobj_ns_type type, void *ns)
 }
 
 EXPORT_SYMBOL(kobject_get);
+EXPORT_SYMBOL(kobject_get_unless_zero);
 EXPORT_SYMBOL(kobject_put);
 EXPORT_SYMBOL(kobject_del);
 

@@ -312,6 +312,15 @@ static int proc_pid_stack(struct seq_file *m, struct pid_namespace *ns,
 	int err;
 	int i;
 
+	/*
+	 * Running the kernel stack unwinder on a task that executes on
+	 * another CPU races with the stack contents, so the unwinder can
+	 * read stale data as return addresses and stack pointers and print
+	 * it. The interface is restricted to CAP_SYS_ADMIN.
+	 */
+	if (!capable(CAP_SYS_ADMIN))
+		return -EACCES;
+
 	entries = kmalloc(MAX_STACK_TRACE_DEPTH * sizeof(*entries), GFP_KERNEL);
 	if (!entries)
 		return -ENOMEM;
