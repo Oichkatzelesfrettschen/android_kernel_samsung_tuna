@@ -50,6 +50,7 @@
 #include <linux/user_namespace.h>
 
 #include <linux/kmsg_dump.h>
+#include <linux/nospec.h>
 /* Move somewhere else to avoid recompiling? */
 #include <generated/utsrelease.h>
 
@@ -1387,6 +1388,8 @@ int do_prlimit(struct task_struct *tsk, unsigned int resource,
 
 	if (resource >= RLIM_NLIMITS)
 		return -EINVAL;
+	resource = array_index_nospec(resource, RLIM_NLIMITS);
+
 	if (new_rlim) {
 		if (new_rlim->rlim_cur > new_rlim->rlim_max)
 			return -EINVAL;
