@@ -56,7 +56,14 @@ struct roccat_device {
 	 */
 	struct roccat_report cbuf[ROCCAT_CBUF_SIZE];
 	int cbuf_end;
+	/* serializes readers; never taken from roccat_report_event() */
 	struct mutex cbuf_lock;
+	/*
+	 * protects cbuf[].value, cbuf_end and every reader's cbuf_start;
+	 * taken with interrupts disabled because roccat_report_event() runs
+	 * from the URB completion path
+	 */
+	spinlock_t cbuf_slock;
 };
 
 struct roccat_reader {
@@ -79,7 +86,19 @@ static ssize_t roccat_read(struct file *file, char __user *buffer,
 	struct roccat_device *device = reader->device;
 	struct roccat_report *report;
 	ssize_t retval = 0, len;
+	unsigned long flags;
+	int start;
+	u8 *rbuf;
 	DECLARE_WAITQUEUE(wait, current);
+
+	/*
+	 * The writer frees a slot's value while holding cbuf_slock, so the
+	 * value is copied out under that lock and handed to userspace from
+	 * this private buffer.
+	 */
+	rbuf = kmalloc(device->report_size, GFP_KERNEL);
+	if (!rbuf)
+		return -ENOMEM;
 
 	mutex_lock(&device->cbuf_lock);
 
@@ -117,22 +136,33 @@ static ssize_t roccat_read(struct file *file, char __user *buffer,
 	if (retval)
 		goto exit_unlock;
 
-	report = &device->cbuf[reader->cbuf_start];
 	/*
 	 * If report is larger than requested amount of data, rest of report
 	 * is lost!
 	 */
 	len = device->report_size > count ? count : device->report_size;
 
-	if (copy_to_user(buffer, report->value, len)) {
+	spin_lock_irqsave(&device->cbuf_slock, flags);
+	start = reader->cbuf_start;
+	report = &device->cbuf[start];
+	memcpy(rbuf, report->value, len);
+	spin_unlock_irqrestore(&device->cbuf_slock, flags);
+
+	if (copy_to_user(buffer, rbuf, len)) {
 		retval = -EFAULT;
 		goto exit_unlock;
 	}
 	retval += len;
-	reader->cbuf_start = (reader->cbuf_start + 1) % ROCCAT_CBUF_SIZE;
+
+	/* the writer moves cbuf_start of a lagging reader; keep its move */
+	spin_lock_irqsave(&device->cbuf_slock, flags);
+	if (reader->cbuf_start == start)
+		reader->cbuf_start = (start + 1) % ROCCAT_CBUF_SIZE;
+	spin_unlock_irqrestore(&device->cbuf_slock, flags);
 
 exit_unlock:
 	mutex_unlock(&device->cbuf_lock);
+	kfree(rbuf);
 	return retval;
 }
 
@@ -252,7 +282,8 @@ int roccat_report_event(int minor, u8 const *data)
 	struct roccat_device *device;
 	struct roccat_reader *reader;
 	struct roccat_report *report;
-	uint8_t *new_value;
+	uint8_t *new_value, *old_value;
+	unsigned long flags;
 
 	device = devices[minor];
 
@@ -260,11 +291,11 @@ int roccat_report_event(int minor, u8 const *data)
 	if (!new_value)
 		return -ENOMEM;
 
+	spin_lock_irqsave(&device->cbuf_slock, flags);
+
 	report = &device->cbuf[device->cbuf_end];
 
-	/* passing NULL is safe */
-	kfree(report->value);
-
+	old_value = report->value;
 	report->value = new_value;
 	device->cbuf_end = (device->cbuf_end + 1) % ROCCAT_CBUF_SIZE;
 
@@ -278,6 +309,11 @@ int roccat_report_event(int minor, u8 const *data)
 		if (reader->cbuf_start == device->cbuf_end)
 			reader->cbuf_start = (reader->cbuf_start + 1) % ROCCAT_CBUF_SIZE;
 	}
+
+	spin_unlock_irqrestore(&device->cbuf_slock, flags);
+
+	/* passing NULL is safe */
+	kfree(old_value);
 
 	wake_up_interruptible(&device->wait);
 	return 0;
@@ -337,6 +373,7 @@ int roccat_connect(struct class *klass, struct hid_device *hid, int report_size)
 	INIT_LIST_HEAD(&device->readers);
 	mutex_init(&device->readers_lock);
 	mutex_init(&device->cbuf_lock);
+	spin_lock_init(&device->cbuf_slock);
 	device->minor = minor;
 	device->hid = hid;
 	device->exist = 1;
