@@ -212,6 +212,24 @@ config OMAP_WATCHDOG
 	  Support for TI OMAP1610/OMAP1710/OMAP2420/OMAP3430/OMAP4430 watchdog.  Say 'Y'
 	  here to enable the OMAP1610/OMAP1710/OMAP2420/OMAP3430/OMAP4430 watchdog timer.
 
+config OMAP_WATCHDOG_BOOT_COVERAGE
+	bool "Keep the OMAP4 MPU watchdog armed from the decompressor through boot"
+	depends on OMAP_WATCHDOG=y && ARCH_OMAP4 && !ARCH_OMAP2 && !ARCH_OMAP3
+	help
+	  The zImage decompressor starts WDT2 with OMAP_WATCHDOG_BOOT_MARGIN
+	  seconds, hwmod setup leaves it counting, and the driver re-arms it
+	  at probe without interrupt petting. A boot that stops anywhere
+	  before userspace opens and closes /dev/watchdog ends in a warm
+	  reset, and the RAM console of the stopped boot survives as
+	  /proc/last_kmsg. For diagnostic images only: a boot that nothing
+	  disarms resets after the margin.
+
+config OMAP_WATCHDOG_BOOT_MARGIN
+	int "Boot watchdog margin in seconds"
+	depends on OMAP_WATCHDOG_BOOT_COVERAGE
+	range 30 600
+	default 120
+
 config PNX4008_WATCHDOG
 	tristate "PNX4008 and LPC32XX Watchdog"
 	depends on ARCH_PNX4008 || ARCH_LPC32XX

@@ -97,9 +97,68 @@ static inline void flush(void)
 	_DEBUG_LL_ENTRY(mach, TI816X_UART##p##_BASE, OMAP_PORT_SHIFT,	\
 		TI816XUART##p)
 
+#ifdef CONFIG_OMAP_WATCHDOG_BOOT_COVERAGE
+/* OMAP4430 WDT2 (wd_timer2) and its CM_WKUP clock control register. */
+#define OMAP4_WDT2_BASE			0x4a314000
+#define OMAP4_WDT2_WCLR			(OMAP4_WDT2_BASE + 0x24)
+#define OMAP4_WDT2_WLDR			(OMAP4_WDT2_BASE + 0x2c)
+#define OMAP4_WDT2_WTGR			(OMAP4_WDT2_BASE + 0x30)
+#define OMAP4_WDT2_WWPS			(OMAP4_WDT2_BASE + 0x34)
+#define OMAP4_WDT2_WSPR			(OMAP4_WDT2_BASE + 0x48)
+#define OMAP4_CM_WKUP_WDT2_CLKCTRL	0x4a307830
+
+#define omap4_wdt2_reg(addr)		(*(volatile u32 *)(addr))
+
+/* Posted-write polls are bounded so an unclocked module cannot stall boot. */
+static inline void omap4_wdt2_wait(u32 pending)
+{
+	u32 n = 0x100000;
+
+	while ((omap4_wdt2_reg(OMAP4_WDT2_WWPS) & pending) && --n)
+		;
+}
+
+static inline void omap4_wdt2_write(u32 reg, u32 val, u32 pending)
+{
+	omap4_wdt2_wait(pending);
+	omap4_wdt2_reg(reg) = val;
+	omap4_wdt2_wait(pending);
+}
+
+/*
+ * Start WDT2 before the kernel runs. The counter ticks at 32768 Hz with the
+ * prescaler at 1, and a WTGR value change reloads it from WLDR; two
+ * distinct trigger writes guarantee one change whatever WTGR held.
+ */
+static inline void omap4_boot_watchdog_arm(void)
+{
+	u32 n = 0x100000;
+
+	omap4_wdt2_reg(OMAP4_CM_WKUP_WDT2_CLKCTRL) =
+		(omap4_wdt2_reg(OMAP4_CM_WKUP_WDT2_CLKCTRL) & ~0x3) | 0x2;
+	while ((omap4_wdt2_reg(OMAP4_CM_WKUP_WDT2_CLKCTRL) & (0x3 << 16)) && --n)
+		;
+
+	omap4_wdt2_write(OMAP4_WDT2_WCLR, 1 << 5, 1 << 0);
+	omap4_wdt2_write(OMAP4_WDT2_WLDR,
+			 0xffffffff - CONFIG_OMAP_WATCHDOG_BOOT_MARGIN * 32768 + 1,
+			 1 << 2);
+	omap4_wdt2_write(OMAP4_WDT2_WTGR, 0x5a5a5a5a, 1 << 3);
+	omap4_wdt2_write(OMAP4_WDT2_WTGR, 0xa5a5a5a5, 1 << 3);
+	omap4_wdt2_write(OMAP4_WDT2_WSPR, 0xbbbb, 1 << 4);
+	omap4_wdt2_write(OMAP4_WDT2_WSPR, 0x4444, 1 << 4);
+}
+#else
+static inline void omap4_boot_watchdog_arm(void)
+{
+}
+#endif
+
 static inline void __arch_decomp_setup(unsigned long arch_id)
 {
 	int port = 0;
+
+	omap4_boot_watchdog_arm();
 
 	/*
 	 * Initialize the port based on the machine ID from the bootloader.
