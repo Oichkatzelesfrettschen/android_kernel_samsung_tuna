@@ -958,26 +958,29 @@ static void
 wl_validate_wps_ie(char *wps_ie, s32 wps_ie_len, bool *pbc)
 {
 	#define WPS_IE_FIXED_LEN 6
-	u16 len;
-	u8 *subel = NULL;
+	u16 remaining;
+	u8 *subel;
 	u16 subelt_id;
 	u16 subelt_len;
 	u16 val;
 	u8 *valptr = (uint8*) &val;
+	bool push_button = false;
 	if (wps_ie == NULL || wps_ie_len < WPS_IE_FIXED_LEN) {
 		WL_ERR(("invalid argument : NULL\n"));
 		return;
 	}
-	len = (u16)wps_ie[TLV_LEN_OFF];
-
-	if (len > wps_ie_len) {
-		WL_ERR(("invalid length len %d, wps ie len %d\n", len, wps_ie_len));
+	remaining = (u8)wps_ie[TLV_LEN_OFF];
+	if ((u8)wps_ie[0] != DOT11_MNG_VS_ID || remaining < 4 ||
+	    remaining + 2 > wps_ie_len ||
+	    memcmp(wps_ie + 2, WPS_OUI, WPS_OUI_LEN) ||
+	    (u8)wps_ie[5] != WPS_OUI_TYPE) {
+		WL_ERR(("invalid WPS IE header\n"));
 		return;
 	}
-	WL_DBG(("wps_ie len=%d\n", len));
-	len -= 4;	/* for the WPS IE's OUI, oui_type fields */
-	subel = wps_ie + WPS_IE_FIXED_LEN;
-	while (len >= 4) {		/* must have attr id, attr len fields */
+	WL_DBG(("wps_ie len=%d\n", remaining));
+	remaining -= 4;	/* WPS OUI and OUI type */
+	subel = (u8 *)wps_ie + WPS_IE_FIXED_LEN;
+	while (remaining >= 4) {	/* attribute id and length */
 		valptr[0] = *subel++;
 		valptr[1] = *subel++;
 		subelt_id = HTON16(val);
@@ -986,55 +989,74 @@ wl_validate_wps_ie(char *wps_ie, s32 wps_ie_len, bool *pbc)
 		valptr[1] = *subel++;
 		subelt_len = HTON16(val);
 
-		len -= 4;			/* for the attr id, attr len fields */
-		len -= subelt_len;	/* for the remaining fields in this attribute */
+		remaining -= 4;
+		if (subelt_len > remaining) {
+			WL_ERR(("truncated WPS attribute 0x%x\n", subelt_id));
+			return;
+		}
+		if (((subelt_id == WPS_ID_VERSION || subelt_id == WPS_ID_REQ_TYPE) &&
+		     subelt_len < 1) ||
+		    ((subelt_id == WPS_ID_CONFIG_METHODS ||
+		      subelt_id == WPS_ID_DEVICE_PWD_ID ||
+		      subelt_id == WPS_ID_SELECTED_REGISTRAR_CONFIG_METHODS) &&
+		     subelt_len < 2) ||
+		    ((subelt_id == WPS_ID_PRIM_DEV_TYPE ||
+		      subelt_id == WPS_ID_REQ_DEV_TYPE) && subelt_len < 8)) {
+			WL_ERR(("short WPS attribute 0x%x\n", subelt_id));
+			return;
+		}
 		WL_DBG((" subel=%p, subelt_id=0x%x subelt_len=%u\n",
 			subel, subelt_id, subelt_len));
 
-		if (subelt_id == WPS_ID_VERSION) {
+		if (subelt_id == WPS_ID_VERSION && subelt_len >= 1) {
 			WL_DBG(("  attr WPS_ID_VERSION: %u\n", *subel));
-		} else if (subelt_id == WPS_ID_REQ_TYPE) {
+		} else if (subelt_id == WPS_ID_REQ_TYPE && subelt_len >= 1) {
 			WL_DBG(("  attr WPS_ID_REQ_TYPE: %u\n", *subel));
-		} else if (subelt_id == WPS_ID_CONFIG_METHODS) {
+		} else if (subelt_id == WPS_ID_CONFIG_METHODS && subelt_len >= 2) {
 			valptr[0] = *subel;
 			valptr[1] = *(subel + 1);
 			WL_DBG(("  attr WPS_ID_CONFIG_METHODS: %x\n", HTON16(val)));
 		} else if (subelt_id == WPS_ID_DEVICE_NAME) {
 			char devname[100];
-			memcpy(devname, subel, subelt_len);
-			devname[subelt_len] = '\0';
+			size_t name_len = min_t(size_t, subelt_len, sizeof(devname) - 1);
+			memcpy(devname, subel, name_len);
+			devname[name_len] = '\0';
 			WL_DBG(("  attr WPS_ID_DEVICE_NAME: %s (len %u)\n",
 				devname, subelt_len));
-		} else if (subelt_id == WPS_ID_DEVICE_PWD_ID) {
+		} else if (subelt_id == WPS_ID_DEVICE_PWD_ID && subelt_len >= 2) {
 			valptr[0] = *subel;
 			valptr[1] = *(subel + 1);
 			WL_DBG(("  attr WPS_ID_DEVICE_PWD_ID: %u\n", HTON16(val)));
-			*pbc = (HTON16(val) == DEV_PW_PUSHBUTTON) ? true : false;
-		} else if (subelt_id == WPS_ID_PRIM_DEV_TYPE) {
+			push_button = (HTON16(val) == DEV_PW_PUSHBUTTON);
+		} else if (subelt_id == WPS_ID_PRIM_DEV_TYPE && subelt_len >= 8) {
 			valptr[0] = *subel;
 			valptr[1] = *(subel + 1);
 			WL_DBG(("  attr WPS_ID_PRIM_DEV_TYPE: cat=%u \n", HTON16(val)));
 			valptr[0] = *(subel + 6);
 			valptr[1] = *(subel + 7);
 			WL_DBG(("  attr WPS_ID_PRIM_DEV_TYPE: subcat=%u\n", HTON16(val)));
-		} else if (subelt_id == WPS_ID_REQ_DEV_TYPE) {
+		} else if (subelt_id == WPS_ID_REQ_DEV_TYPE && subelt_len >= 8) {
 			valptr[0] = *subel;
 			valptr[1] = *(subel + 1);
 			WL_DBG(("  attr WPS_ID_REQ_DEV_TYPE: cat=%u\n", HTON16(val)));
 			valptr[0] = *(subel + 6);
 			valptr[1] = *(subel + 7);
 			WL_DBG(("  attr WPS_ID_REQ_DEV_TYPE: subcat=%u\n", HTON16(val)));
-		} else if (subelt_id == WPS_ID_SELECTED_REGISTRAR_CONFIG_METHODS) {
+		} else if (subelt_id == WPS_ID_SELECTED_REGISTRAR_CONFIG_METHODS &&
+			   subelt_len >= 2) {
 			valptr[0] = *subel;
 			valptr[1] = *(subel + 1);
 			WL_DBG(("  attr WPS_ID_SELECTED_REGISTRAR_CONFIG_METHODS"
 				": cat=%u\n", HTON16(val)));
 		} else {
-			WL_DBG(("  unknown attr 0x%x\n", subelt_id));
+			WL_DBG(("  unknown or short attr 0x%x\n", subelt_id));
 		}
 
 		subel += subelt_len;
+		remaining -= subelt_len;
 	}
+	if (remaining == 0)
+		*pbc = push_button;
 }
 #endif /* LINUX_VERSION_CODE < KERNEL_VERSION(3, 4, 0) */
 
@@ -8079,6 +8101,27 @@ exit:
  * full escan
  */
 #define FULL_ESCAN_ON_PFN_NET_FOUND		1
+static int
+wl_pfn_result_count(const wl_pfn_scanresults_t *result, u32 payload_len)
+{
+	u32 result_count;
+	u32 index;
+
+	if (!result || payload_len < offsetof(wl_pfn_scanresults_t, netinfo))
+		return -EINVAL;
+	result_count = result->count;
+	if (result_count > (payload_len - offsetof(wl_pfn_scanresults_t, netinfo)) /
+			   sizeof(wl_pfn_net_info_t))
+		return -EINVAL;
+	result_count = min_t(u32, result_count, MAX_PFN_LIST_COUNT);
+	for (index = 0; index < result_count; index++) {
+		if (result->netinfo[index].pfnsubnet.SSID_len >
+		    sizeof(result->netinfo[index].pfnsubnet.SSID))
+			return -EINVAL;
+	}
+	return result_count;
+}
+
 static s32
 wl_notify_sched_scan_results(struct wl_priv *wl, struct net_device *ndev,
 	const wl_event_msg_t *e, void *data)
@@ -8091,8 +8134,9 @@ wl_notify_sched_scan_results(struct wl_priv *wl, struct net_device *ndev,
 	struct ieee80211_channel *channel = NULL;
 	int channel_req = 0;
 	int band = 0;
-	struct wl_pfn_scanresults *pfn_result = (struct wl_pfn_scanresults *)data;
-	int n_pfn_results = pfn_result->count;
+	const wl_pfn_scanresults_t *pfn_result = data;
+	u32 payload_len = ntoh32(e->datalen);
+	int n_pfn_results;
 
 	WL_DBG(("Enter\n"));
 
@@ -8100,14 +8144,16 @@ wl_notify_sched_scan_results(struct wl_priv *wl, struct net_device *ndev,
 		WL_PNO(("PFN NET LOST event. Do Nothing \n"));
 		return 0;
 	}
+	n_pfn_results = wl_pfn_result_count(pfn_result, payload_len);
+	if (n_pfn_results < 0) {
+		WL_ERR(("invalid PFN result payload\n"));
+		return -EINVAL;
+	}
 	WL_PNO((">>> PFN NET FOUND event. count:%d \n", n_pfn_results));
 	if (n_pfn_results > 0) {
 		int i;
 
-		if (n_pfn_results > MAX_PFN_LIST_COUNT)
-			n_pfn_results = MAX_PFN_LIST_COUNT;
-		pnetinfo = (wl_pfn_net_info_t *)(data + sizeof(wl_pfn_scanresults_t)
-				- sizeof(wl_pfn_net_info_t));
+		pnetinfo = (wl_pfn_net_info_t *)pfn_result->netinfo;
 
 		memset(&ssid, 0x00, sizeof(ssid));
 
@@ -8127,13 +8173,15 @@ wl_notify_sched_scan_results(struct wl_priv *wl, struct net_device *ndev,
 
 		for (i = 0; i < n_pfn_results; i++) {
 			netinfo = &pnetinfo[i];
-			if (!netinfo) {
-				WL_ERR(("Invalid netinfo ptr. index:%d", i));
+			if (netinfo->pfnsubnet.SSID_len > sizeof(ssid[i].ssid)) {
+				WL_ERR(("PFN SSID exceeds cfg80211 destination\n"));
 				err = -EINVAL;
 				goto out_err;
 			}
-			WL_PNO((">>> SSID:%s Channel:%d \n",
-				netinfo->pfnsubnet.SSID, netinfo->pfnsubnet.channel));
+			WL_PNO((">>> SSID:%.*s Channel:%d \n",
+				netinfo->pfnsubnet.SSID_len,
+				(char *)netinfo->pfnsubnet.SSID,
+				netinfo->pfnsubnet.channel));
 			/* PFN result doesn't have all the info which are required by the supplicant
 			 * (For e.g IEs) Do a target Escan so that sched scan results are reported
 			 * via wl_inform_single_bss in the required format. Escan does require the
