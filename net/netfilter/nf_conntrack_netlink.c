@@ -29,6 +29,8 @@
 #include <linux/spinlock.h>
 #include <linux/interrupt.h>
 #include <linux/slab.h>
+#include <linux/random.h>
+#include <linux/siphash.h>
 
 #include <linux/netfilter.h>
 #include <net/netlink.h>
@@ -375,7 +377,7 @@ ctnetlink_dump_nat_seq_adj(struct sk_buff *skb, const struct nf_conn *ct)
 static inline int
 ctnetlink_dump_id(struct sk_buff *skb, const struct nf_conn *ct)
 {
-	NLA_PUT_BE32(skb, CTA_ID, htonl((unsigned long)ct));
+	NLA_PUT_BE32(skb, CTA_ID, (__force __be32)nf_ct_get_id(ct));
 	return 0;
 
 nla_put_failure:
@@ -929,8 +931,9 @@ ctnetlink_del_conntrack(struct sock *ctnl, struct sk_buff *skb,
 	ct = nf_ct_tuplehash_to_ctrack(h);
 
 	if (cda[CTA_ID]) {
-		u_int32_t id = ntohl(nla_get_be32(cda[CTA_ID]));
-		if (id != (u32)(unsigned long)ct) {
+		__be32 id = nla_get_be32(cda[CTA_ID]);
+
+		if (id != (__force __be32)nf_ct_get_id(ct)) {
 			nf_ct_put(ct);
 			return -ENOENT;
 		}
@@ -1635,6 +1638,50 @@ nla_put_failure:
 	return -1;
 }
 
+/* Key for nf_expect_get_id(), filled from the entropy pool on first use. The
+ * flag is published after the key, so a reader that sees it set reads a
+ * complete key.
+ */
+static siphash_key_t exp_id_seed __read_mostly;
+static bool exp_id_seed_ready __read_mostly;
+static DEFINE_SPINLOCK(exp_id_seed_lock);
+
+static void exp_id_seed_init_once(void)
+{
+	unsigned long flags;
+
+	if (likely(exp_id_seed_ready)) {
+		smp_rmb();
+		return;
+	}
+
+	spin_lock_irqsave(&exp_id_seed_lock, flags);
+	if (!exp_id_seed_ready) {
+		get_random_bytes(&exp_id_seed, sizeof(exp_id_seed));
+		smp_wmb();
+		exp_id_seed_ready = true;
+	}
+	spin_unlock_irqrestore(&exp_id_seed_lock, flags);
+}
+
+static __be32 nf_expect_get_id(const struct nf_conntrack_expect *exp)
+{
+	unsigned long a, b, c, d;
+
+	exp_id_seed_init_once();
+
+	a = (unsigned long)exp;
+	b = (unsigned long)exp->helper;
+	c = (unsigned long)exp->master;
+	d = (unsigned long)siphash(&exp->tuple, sizeof(exp->tuple), &exp_id_seed);
+
+#ifdef CONFIG_64BIT
+	return (__force __be32)siphash_4u64((u64)a, (u64)b, (u64)c, (u64)d, &exp_id_seed);
+#else
+	return (__force __be32)siphash_4u32((u32)a, (u32)b, (u32)c, (u32)d, &exp_id_seed);
+#endif
+}
+
 static int
 ctnetlink_exp_dump_expect(struct sk_buff *skb,
 			  const struct nf_conntrack_expect *exp)
@@ -1656,7 +1703,7 @@ ctnetlink_exp_dump_expect(struct sk_buff *skb,
 		goto nla_put_failure;
 
 	NLA_PUT_BE32(skb, CTA_EXPECT_TIMEOUT, htonl(timeout));
-	NLA_PUT_BE32(skb, CTA_EXPECT_ID, htonl((unsigned long)exp));
+	NLA_PUT_BE32(skb, CTA_EXPECT_ID, nf_expect_get_id(exp));
 	NLA_PUT_BE32(skb, CTA_EXPECT_FLAGS, htonl(exp->flags));
 	help = nfct_help(master);
 	if (help) {
@@ -1863,7 +1910,8 @@ ctnetlink_get_expect(struct sock *ctnl, struct sk_buff *skb,
 
 	if (cda[CTA_EXPECT_ID]) {
 		__be32 id = nla_get_be32(cda[CTA_EXPECT_ID]);
-		if (ntohl(id) != (u32)(unsigned long)exp) {
+
+		if (id != nf_expect_get_id(exp)) {
 			nf_ct_expect_put(exp);
 			return -ENOENT;
 		}
@@ -1924,7 +1972,8 @@ ctnetlink_del_expect(struct sock *ctnl, struct sk_buff *skb,
 
 		if (cda[CTA_EXPECT_ID]) {
 			__be32 id = nla_get_be32(cda[CTA_EXPECT_ID]);
-			if (ntohl(id) != (u32)(unsigned long)exp) {
+
+			if (id != nf_expect_get_id(exp)) {
 				nf_ct_expect_put(exp);
 				return -ENOENT;
 			}

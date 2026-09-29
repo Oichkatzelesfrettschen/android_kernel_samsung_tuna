@@ -162,6 +162,8 @@ static inline u_int8_t nf_ct_protonum(const struct nf_conn *ct)
 
 extern struct net init_net;
 
+u32 nf_ct_get_id(const struct nf_conn *ct);
+
 static inline struct net *nf_ct_net(const struct nf_conn *ct)
 {
 	return read_pnet(&ct->ct_net);
