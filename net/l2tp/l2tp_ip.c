@@ -76,15 +76,6 @@ found:
 	return sk;
 }
 
-static inline struct sock *l2tp_ip_bind_lookup(struct net *net, __be32 laddr, int dif, u32 tunnel_id)
-{
-	struct sock *sk = __l2tp_ip_bind_lookup(net, laddr, dif, tunnel_id);
-	if (sk)
-		sock_hold(sk);
-
-	return sk;
-}
-
 /* When processing receive frames, there are two cases to
  * consider. Data frames consist of a non-zero session-id and an
  * optional cookie. Control frames consist of a regular L2TP header
