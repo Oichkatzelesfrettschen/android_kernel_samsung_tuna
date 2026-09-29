@@ -45,7 +45,7 @@ static struct platform_device ram_console_device = {
 static __initdata bool omap_ramconsole_inited;
 
 /**
- * omap_ram_console_register() - device_initcall to register ramconsole device
+ * omap_ram_console_register() - initcall to register ramconsole device
  */
 static int __init omap_ram_console_register(void)
 {
@@ -67,7 +67,11 @@ static int __init omap_ram_console_register(void)
 
 	return ret;
 }
+#ifdef CONFIG_OMAP_RAM_CONSOLE_ARCH_INITCALL
+arch_initcall(omap_ram_console_register);
+#else
 device_initcall(omap_ram_console_register);
+#endif
 
 /**
  * omap_ram_console_init() - setup the ram console device for OMAP
