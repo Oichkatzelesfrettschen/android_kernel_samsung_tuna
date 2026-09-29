@@ -22,6 +22,7 @@
 #include <linux/slab.h>
 #include <linux/random.h>
 #include <linux/jhash.h>
+#include <linux/siphash.h>
 #include <linux/err.h>
 #include <linux/percpu.h>
 #include <linux/moduleparam.h>
@@ -173,6 +174,65 @@ nf_ct_invert_tuple(struct nf_conntrack_tuple *inverse,
 	return l4proto->invert_tuple(inverse, orig);
 }
 EXPORT_SYMBOL_GPL(nf_ct_invert_tuple);
+
+/* Key for nf_ct_get_id(), filled from the entropy pool on first use. The
+ * flag is published after the key, so a reader that sees it set reads a
+ * complete key.
+ */
+static siphash_key_t ct_id_seed __read_mostly;
+static bool ct_id_seed_ready __read_mostly;
+static DEFINE_SPINLOCK(ct_id_seed_lock);
+
+static void ct_id_seed_init_once(void)
+{
+	unsigned long flags;
+
+	if (likely(ct_id_seed_ready)) {
+		smp_rmb();
+		return;
+	}
+
+	spin_lock_irqsave(&ct_id_seed_lock, flags);
+	if (!ct_id_seed_ready) {
+		get_random_bytes(&ct_id_seed, sizeof(ct_id_seed));
+		smp_wmb();
+		ct_id_seed_ready = true;
+	}
+	spin_unlock_irqrestore(&ct_id_seed_lock, flags);
+}
+
+/* Generate a almost-unique pseudo-id for a given conntrack.
+ *
+ * intentionally doesn't re-use any of the seeds used for hash
+ * table location, we assume id gets exposed to userspace.
+ *
+ * Following nf_conn items do not change throughout lifetime
+ * of the nf_conn:
+ *
+ * 1. nf_conn address
+ * 2. nf_conn->master address (normally NULL)
+ * 3. the associated net namespace
+ * 4. the original direction tuple
+ */
+u32 nf_ct_get_id(const struct nf_conn *ct)
+{
+	unsigned long a, b, c, d;
+
+	ct_id_seed_init_once();
+
+	a = (unsigned long)ct;
+	b = (unsigned long)ct->master;
+	c = (unsigned long)nf_ct_net(ct);
+	d = (unsigned long)siphash(&ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple,
+				   sizeof(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple),
+				   &ct_id_seed);
+#ifdef CONFIG_64BIT
+	return siphash_4u64((u64)a, (u64)b, (u64)c, (u64)d, &ct_id_seed);
+#else
+	return siphash_4u32((u32)a, (u32)b, (u32)c, (u32)d, &ct_id_seed);
+#endif
+}
+EXPORT_SYMBOL_GPL(nf_ct_get_id);
 
 static void
 clean_from_lists(struct nf_conn *ct)
