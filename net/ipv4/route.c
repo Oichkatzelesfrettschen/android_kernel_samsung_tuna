@@ -409,15 +409,16 @@ static void rt_cache_seq_stop(struct seq_file *seq, void *v)
 
 static int rt_cache_seq_show(struct seq_file *seq, void *v)
 {
+	seq_setwidth(seq, 127);
 	if (v == SEQ_START_TOKEN)
-		seq_printf(seq, "%-127s\n",
+		seq_puts(seq,
 			   "Iface\tDestination\tGateway \tFlags\t\tRefCnt\tUse\t"
 			   "Metric\tSource\t\tMTU\tWindow\tIRTT\tTOS\tHHRef\t"
 			   "HHUptod\tSpecDst");
 	else {
 		struct rtable *r = v;
 		struct neighbour *n;
-		int len, HHUptod;
+		int HHUptod;
 
 		rcu_read_lock();
 		n = dst_get_neighbour(&r->dst);
@@ -425,7 +426,7 @@ static int rt_cache_seq_show(struct seq_file *seq, void *v)
 		rcu_read_unlock();
 
 		seq_printf(seq, "%s\t%08X\t%08X\t%8X\t%d\t%u\t%d\t"
-			      "%08X\t%d\t%u\t%u\t%02X\t%d\t%1d\t%08X%n",
+			      "%08X\t%d\t%u\t%u\t%02X\t%d\t%1d\t%08X",
 			r->dst.dev ? r->dst.dev->name : "*",
 			(__force u32)r->rt_dst,
 			(__force u32)r->rt_gateway,
@@ -438,10 +439,9 @@ static int rt_cache_seq_show(struct seq_file *seq, void *v)
 			r->rt_key_tos,
 			r->dst.hh ? atomic_read(&r->dst.hh->hh_refcnt) : -1,
 			HHUptod,
-			r->rt_spec_dst, &len);
-
-		seq_printf(seq, "%*s\n", 127 - len, "");
+			r->rt_spec_dst);
 	}
+	seq_pad(seq, '\n');
 	return 0;
 }
 
