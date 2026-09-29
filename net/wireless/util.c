@@ -581,6 +581,9 @@ void ieee80211_amsdu_to_8023s(struct sk_buff *skb, struct sk_buff_head *list,
 		/* the last MSDU has no padding */
 		if (subframe_len > remaining)
 			goto purge;
+		/* mitigate A-MSDU aggregation injection attacks */
+		if (!compare_ether_addr(eth->h_dest, rfc1042_header))
+			goto purge;
 
 		skb_pull(skb, sizeof(struct ethhdr));
 		/* reuse skb for the last subframe */
