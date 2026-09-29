@@ -899,6 +899,10 @@ static ssize_t environ_read(struct file *file, char __user *buf,
 		goto out_free;
 
 	ret = 0;
+	/* The binfmt create_*_tables set env_end last; zero means not ready. */
+	if (!mm->env_end)
+		goto out_mmput;
+
 	while (count > 0) {
 		int this_len, retval, max_len;
 
@@ -930,6 +934,7 @@ static ssize_t environ_read(struct file *file, char __user *buf,
 	}
 	*ppos = src;
 
+out_mmput:
 	mmput(mm);
 out_free:
 	free_page((unsigned long) page);
