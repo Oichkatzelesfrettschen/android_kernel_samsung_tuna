@@ -22,6 +22,7 @@
 #include <linux/init.h>
 #include <linux/io.h>
 #include <linux/clk.h>
+#include <linux/string.h>
 #include <linux/omapfb.h>
 
 #include <asm/tlb.h>
@@ -335,6 +336,18 @@ static int __init _omap2_init_reprogram_sdrc(void)
 
 static int _set_hwmod_postsetup_state(struct omap_hwmod *oh, void *data)
 {
+#ifdef CONFIG_OMAP_WATCHDOG_BOOT_COVERAGE
+	/*
+	 * A softreset returns WDT2 to its reset timeout and a disable stops
+	 * it; skipping both keeps the decompressor's margin counting until
+	 * omap_wdt re-arms it at probe.
+	 */
+	if (!strcmp(oh->name, "wd_timer2")) {
+		oh->flags |= HWMOD_INIT_NO_RESET;
+		return omap_hwmod_set_postsetup_state(oh,
+						      _HWMOD_STATE_ENABLED);
+	}
+#endif
 	return omap_hwmod_set_postsetup_state(oh, *(u8 *)data);
 }
 

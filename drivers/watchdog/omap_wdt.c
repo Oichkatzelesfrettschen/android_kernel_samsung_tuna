@@ -161,12 +161,9 @@ static irqreturn_t omap_wdt_interrupt(int irq, void *dev_id)
 	return IRQ_HANDLED;
 }
 
-static int omap_wdt_setup(struct omap_wdt_dev *wdev)
+static void omap_wdt_program(struct omap_wdt_dev *wdev, bool pet_irq)
 {
 	void __iomem *base = wdev->base;
-
-	if (test_and_set_bit(1, (unsigned long *)&(wdev->omap_wdt_users)))
-		return -EBUSY;
 
 	/* initialize prescaler */
 	while (__raw_readl(base + OMAP_WATCHDOG_WPS) & 0x01)
@@ -181,10 +178,18 @@ static int omap_wdt_setup(struct omap_wdt_dev *wdev)
 
 	/* Enable delay interrupt */
 
-	if (kernelpet && wdev->irq)
+	if (pet_irq)
 		__raw_writel(0x2, base + OMAP_WATCHDOG_WIRQENSET);
 
 	omap_wdt_enable(wdev);
+}
+
+static int omap_wdt_setup(struct omap_wdt_dev *wdev)
+{
+	if (test_and_set_bit(1, (unsigned long *)&(wdev->omap_wdt_users)))
+		return -EBUSY;
+
+	omap_wdt_program(wdev, kernelpet && wdev->irq);
 
 	return 0;
 }
@@ -380,8 +385,18 @@ static int __devinit omap_wdt_probe(struct platform_device *pdev)
 	pm_runtime_irq_safe(wdev->dev);
 	pm_runtime_get_sync(wdev->dev);
 
+#ifdef CONFIG_OMAP_WATCHDOG_BOOT_COVERAGE
+	/*
+	 * Re-arm the decompressor-started timer without interrupt petting, so a
+	 * boot that stops with interrupts running still resets. Opening and
+	 * closing /dev/watchdog disarms it through omap_wdt_release().
+	 */
+	omap_wdt_adjust_timeout(CONFIG_OMAP_WATCHDOG_BOOT_MARGIN);
+	omap_wdt_program(wdev, false);
+#else
 	omap_wdt_disable(wdev);
 	omap_wdt_adjust_timeout(timer_margin);
+#endif
 
 	wdev->omap_wdt_miscdev.parent = &pdev->dev;
 	wdev->omap_wdt_miscdev.minor = WATCHDOG_MINOR;
@@ -397,6 +412,11 @@ static int __devinit omap_wdt_probe(struct platform_device *pdev)
 		timer_margin);
 
 	omap_wdt_dev = pdev;
+
+#ifdef CONFIG_OMAP_WATCHDOG_BOOT_COVERAGE
+	pr_info("OMAP Watchdog Timer: boot coverage armed, no kernel petting\n");
+	return 0;
+#endif
 
 	if (kernelpet && wdev->irq) {
 		wdev->nb.notifier_call = omap_wdt_nb_func;
