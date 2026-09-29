@@ -188,6 +188,29 @@ static const char *dev_uevent_name(struct kset *kset, struct kobject *kobj)
 	return NULL;
 }
 
+/*
+ * Fill "DRIVER=<name>" for a device. The uevent attribute calls dev_uevent()
+ * without device_lock(), so dev->driver can change to NULL while a probe
+ * fails or the device unbinds. ACCESS_ONCE() fetches one consistent pointer,
+ * and the bus drivers klist lock keeps the driver from disappearing during
+ * the read: bus_remove_driver() takes the same lock in klist_remove() before
+ * it detaches the driver from its devices.
+ */
+static void dev_driver_uevent(struct device *dev, struct kobj_uevent_env *env)
+{
+	struct bus_type *bus = dev->bus;
+	struct device_driver *driver;
+
+	if (!bus || !bus->p)
+		return;
+
+	spin_lock(&bus->p->klist_drivers.k_lock);
+	driver = ACCESS_ONCE(dev->driver);
+	if (driver)
+		add_uevent_var(env, "DRIVER=%s", driver->name);
+	spin_unlock(&bus->p->klist_drivers.k_lock);
+}
+
 static int dev_uevent(struct kset *kset, struct kobject *kobj,
 		      struct kobj_uevent_env *env)
 {
@@ -214,8 +237,8 @@ static int dev_uevent(struct kset *kset, struct kobject *kobj,
 	if (dev->type && dev->type->name)
 		add_uevent_var(env, "DEVTYPE=%s", dev->type->name);
 
-	if (dev->driver)
-		add_uevent_var(env, "DRIVER=%s", dev->driver->name);
+	/* Add "DRIVER=%s" variable if the device is bound to a driver */
+	dev_driver_uevent(dev, env);
 
 	/* have the bus specific function add its stuff */
 	if (dev->bus && dev->bus->uevent) {

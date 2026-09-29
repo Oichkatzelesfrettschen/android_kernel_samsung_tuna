@@ -111,6 +111,17 @@ static inline int driver_match_device(struct device_driver *drv,
 	return drv->bus->match ? drv->bus->match(dev, drv) : 1;
 }
 
+/*
+ * Reading dev->driver from the uevent attribute takes no device lock, so
+ * every store goes through ACCESS_ONCE() to keep the pointer from tearing
+ * and to pair with the ACCESS_ONCE() load in dev_driver_uevent().
+ */
+static inline void device_set_driver(struct device *dev,
+				     struct device_driver *drv)
+{
+	ACCESS_ONCE(dev->driver) = drv;
+}
+
 extern char *make_class_name(const char *name, struct kobject *kobj);
 
 extern int devres_release_all(struct device *dev);
