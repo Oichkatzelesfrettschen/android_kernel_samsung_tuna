@@ -114,7 +114,7 @@ static int really_probe(struct device *dev, struct device_driver *drv)
 		 drv->bus->name, __func__, drv->name, dev_name(dev));
 	WARN_ON(!list_empty(&dev->devres_head));
 
-	dev->driver = drv;
+	device_set_driver(dev, drv);
 	if (driver_sysfs_add(dev)) {
 		printk(KERN_ERR "%s: driver_sysfs_add(%s) failed\n",
 			__func__, dev_name(dev));
@@ -140,7 +140,7 @@ static int really_probe(struct device *dev, struct device_driver *drv)
 probe_failed:
 	devres_release_all(dev);
 	driver_sysfs_remove(dev);
-	dev->driver = NULL;
+	device_set_driver(dev, NULL);
 
 	if (ret != -ENODEV && ret != -ENXIO) {
 		/* driver matched but the probe failed */
@@ -253,7 +253,7 @@ int device_attach(struct device *dev)
 		if (ret == 0)
 			ret = 1;
 		else {
-			dev->driver = NULL;
+			device_set_driver(dev, NULL);
 			ret = 0;
 		}
 	} else {
@@ -337,7 +337,7 @@ static void __device_release_driver(struct device *dev)
 		else if (drv->remove)
 			drv->remove(dev);
 		devres_release_all(dev);
-		dev->driver = NULL;
+		device_set_driver(dev, NULL);
 		klist_remove(&dev->p->knode_driver);
 		if (dev->bus)
 			blocking_notifier_call_chain(&dev->bus->p->bus_notifier,
