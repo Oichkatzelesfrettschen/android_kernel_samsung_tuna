@@ -278,8 +278,15 @@ SECTIONS
 
 	NOTES
 
-	/* Reject relocation BSS before the ThinLTO BSS wildcard. */
+	/*
+	 * Reject relocation BSS before the ThinLTO BSS wildcard. An output
+	 * section with an explicit address moves the location counter to that
+	 * address in GNU ld, so the counter is restored before BSS_SECTION;
+	 * without the restore, .bss and _end follow from address 0.
+	 */
+	__bss_rel_ro_dot = .;
 	.bss.rel.ro 0 : { *(.bss.rel.ro) }
+	. = __bss_rel_ro_dot;
 
 	BSS_SECTION(0, 0, 0)
 	_end = .;
