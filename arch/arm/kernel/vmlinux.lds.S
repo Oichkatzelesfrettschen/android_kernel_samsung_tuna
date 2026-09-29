@@ -214,6 +214,14 @@ SECTIONS
 #ifdef CONFIG_LTO_CLANG_THIN
 		*(.data.*)
 #endif
+		/*
+		 * GNU ARM ld reserves three GOT PLT words even without a PLT.
+		 * They stay inside the loaded image; an output section at
+		 * address 0 would make objcopy pad the binary from 0.
+		 */
+		__got_plt_start = .;
+		*(.got.plt)
+		__got_plt_end = .;
 
 		_edata = .;
 	}
@@ -278,8 +286,15 @@ SECTIONS
 
 	NOTES
 
-	/* Reject relocation BSS before the ThinLTO BSS wildcard. */
+	/*
+	 * Reject relocation BSS before the ThinLTO BSS wildcard. An output
+	 * section with an explicit address moves the location counter to that
+	 * address in GNU ld, so the counter is restored before BSS_SECTION;
+	 * without the restore, .bss and _end follow from address 0.
+	 */
+	__bss_rel_ro_dot = .;
 	.bss.rel.ro 0 : { *(.bss.rel.ro) }
+	. = __bss_rel_ro_dot;
 
 	BSS_SECTION(0, 0, 0)
 	_end = .;
@@ -295,7 +310,6 @@ SECTIONS
 
 #endif
 	/* A static kernel cannot resolve PLT calls or dynamic relocations. */
-	.got.plt 0 : { *(.got.plt) }
 	.igot.plt 0 : { *(.igot.plt) }
 	.rel.got 0 : { *(.rel.got) }
 	.rel.plt 0 : { *(.rel.plt) }
@@ -326,7 +340,7 @@ ASSERT((__proc_info_end - __proc_info_begin), "missing CPU support")
 ASSERT((__arch_info_end - __arch_info_begin), "no machine record defined")
 ASSERT(SIZEOF(.bss.rel.ro) == 0, "unexpected relocation BSS")
 /* GNU ARM ld reserves three zero GOT PLT words without emitting a PLT. */
-ASSERT(SIZEOF(.got.plt) == 0 || SIZEOF(.got.plt) == 12, "unexpected GOT PLT")
+ASSERT(__got_plt_end - __got_plt_start == 0 || __got_plt_end - __got_plt_start == 12, "unexpected GOT PLT")
 ASSERT(SIZEOF(.igot.plt) == 0, "unexpected indirect GOT PLT")
 ASSERT(SIZEOF(.rel.got) == 0, "unexpected GOT relocations")
 ASSERT(SIZEOF(.rel.plt) == 0, "unexpected PLT relocations")
