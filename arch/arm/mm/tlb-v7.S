@@ -96,6 +96,7 @@ ENTRY(v7wbi_flush_kern_tlb_range)
 ENDPROC(v7wbi_flush_kern_tlb_range)
 
 	__INIT
+	.align	2
 
 	.type	v7wbi_tlb_fns, #object
 ENTRY(v7wbi_tlb_fns)

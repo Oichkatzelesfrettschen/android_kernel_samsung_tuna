@@ -52,6 +52,6 @@ ENDPROC(__clear_user)
 ENDPROC(__clear_user_std)
 
 		.pushsection .fixup,"ax"
-		.align	0
+		.align	2
 9001:		ldmfd	sp!, {r0, pc}
 		.popsection

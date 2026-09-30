@@ -201,6 +201,7 @@
  */
 #define ALT_UP(instr...)					\
 	.pushsection ".alt.smp.init", "a"			;\
+	.align	2						;\
 	.long	9998b						;\
 9997:	instr							;\
 	.if . - 9997b != 4					;\
@@ -209,6 +210,7 @@
 	.popsection
 #define ALT_UP_B(label)					\
 	.pushsection ".alt.smp.init", "a"			;\
+	.align	2						;\
 	.long	9998b						;\
 	W(b)	. + (label - 9998b)				;\
 	.popsection
