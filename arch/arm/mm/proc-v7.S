@@ -450,6 +450,7 @@ __v7_setup_stack:
 	.space	4 * 11				@ 11 registers
 
 	__INITDATA
+	.align	2
 
 	.type	v7_processor_functions, #object
 ENTRY(v7_processor_functions)
@@ -481,6 +482,7 @@ cpu_elf_name:
 	.align
 
 	.section ".proc.info.init", "a"
+	.align	2
 
 	.type   __v7_ca9mp_proc_info, #object
 __v7_ca9mp_proc_info:

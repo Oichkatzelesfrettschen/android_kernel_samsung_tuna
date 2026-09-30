@@ -353,6 +353,7 @@ ENTRY(v7_dma_unmap_area)
 ENDPROC(v7_dma_unmap_area)
 
 	__INITDATA
+	.align	2
 
 	.type	v7_cache_fns, #object
 ENTRY(v7_cache_fns)

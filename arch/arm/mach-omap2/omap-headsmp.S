@@ -25,6 +25,7 @@
 #define OMAP4_AUX_CORE_BOOT1_PA			0x48281804
 
 	__INIT
+	.align	2
 
 /*
  * OMAP4 specific entry point for secondary CPU to jump from ROM

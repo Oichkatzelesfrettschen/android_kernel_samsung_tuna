@@ -519,6 +519,7 @@ ENDPROC(__und_usr)
  * The out of line fixup for the ldrt above.
  */
 	.pushsection .fixup, "ax"
+	.align	2
 4:	mov	pc, r9
 	.popsection
 	.pushsection __ex_table,"a"
@@ -672,6 +673,7 @@ do_fpe:
  */
 
 	.pushsection .data
+	.align	2
 ENTRY(fp_enter)
 	.word	no_fp
 	.popsection
@@ -1243,6 +1245,7 @@ __vectors_start:
 __vectors_end:
 
 	.data
+	.align	2
 
 	.globl	cr_alignment
 	.globl	cr_no_alignment
