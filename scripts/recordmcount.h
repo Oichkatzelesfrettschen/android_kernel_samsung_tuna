@@ -211,13 +211,21 @@ static unsigned int get_shstrndx(Elf_Ehdr const *ehdr, Elf_Shdr const *shdr0)
 		w(shdr0->sh_link) : w2(ehdr->e_shstrndx);
 }
 
+/*
+ * Return the section a symbol is defined in, or 0 when st_shndx names no
+ * section.  SHN_ABS (0xfff1), SHN_COMMON and the other reserved values
+ * share their numbers with real section indices once an object holds
+ * 0xff00 or more sections, as a ThinLTO vmlinux.o does, so they must not
+ * be compared against a text section index.
+ */
 static unsigned int get_symindex(Elf_Sym const *symbol,
 		Elf_Sym const *symbols, Elf32_Word const *extended_indices)
 {
 	unsigned long index;
+	unsigned int const shndx = w2(symbol->st_shndx);
 
-	if (symbol->st_shndx != SHN_XINDEX)
-		return w2(symbol->st_shndx);
+	if (shndx != SHN_XINDEX)
+		return shndx < SHN_LORESERVE ? shndx : 0;
 	if (!extended_indices) {
 		fprintf(stderr, "missing extended symbol section indices\n");
 		fail_file();
