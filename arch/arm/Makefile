@@ -143,6 +143,16 @@ endif
 KBUILD_CFLAGS	+=$(CFLAGS_ABI) $(CFLAGS_THUMB2) $(CFLAGS_ARM) $(arch-y) $(tune-y) $(call cc-option,-mshort-load-bytes,$(call cc-option,-malignment-traps,)) -msoft-float -Uarm
 KBUILD_AFLAGS	+=$(CFLAGS_ABI) $(AFLAGS_THUMB2) $(arch-y) $(tune-y) -include asm/unified.h -msoft-float
 
+# Under -pg, Clang emits the old-ABI "bl mcount" unless the GNU EABI
+# variant is selected; that entry point recovers the return address from
+# an APCS frame Clang does not build. -meabi gnu makes Clang push lr and
+# call __gnu_mcount_nc as GCC does. The call is fixed in the front end, so
+# ThinLTO code generation keeps it. Assembler input takes no
+# code-generation option, so the flag stays out of KBUILD_AFLAGS.
+ifneq ($(LLVM),)
+KBUILD_CFLAGS	+=-meabi gnu
+endif
+
 CHECKFLAGS	+= -D__arm__
 
 #Default value
