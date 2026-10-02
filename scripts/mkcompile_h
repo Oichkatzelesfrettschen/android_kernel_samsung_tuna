@@ -66,9 +66,11 @@ UTS_TRUNCATE="cut -b -$UTS_LEN"
 
 # Clang reports compile-only flags as unused for -v with no input.
 # --version prints its version without treating those flags as a diagnostic.
+# Vendor builds prefix that line, as in "Android (6573524 based on r383902b)
+# clang version 11.0.2", so the match accepts any text before "clang version".
 COMPILER_VERSION=`$CC --version 2>&1 | head -n 1`
 case "$COMPILER_VERSION" in
-  clang\ version*) ;;
+  *clang\ version*) ;;
   *) COMPILER_VERSION=`$CC -v 2>&1 | tail -n 1` ;;
 esac
 
