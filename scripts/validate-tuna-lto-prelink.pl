@@ -144,7 +144,12 @@ exists $by_name{'.symtab'} or die "$object: missing symbol table\n";
 open my $symbol_pipe, '-|', $readelf, '-sW', $object
 	or die "cannot read symbols in $object: $!\n";
 my $unresolved_crc = 0;
+my %symbol_section;
 while (my $line = <$symbol_pipe>) {
+	if ($mcount_required && $line =~
+	    /^\s*(\d+):\s+[0-9a-fA-F]+\s+\d+\s+\S+\s+\S+\s+\S+\s+(\S+)/) {
+		$symbol_section{$1} = $2;
+	}
 	next if index($line, '__crc_') < 0;
 	$unresolved_crc = 1 if $line =~ /[ \t]UND[ \t]+__crc_\S+/;
 }
@@ -167,12 +172,19 @@ if ($mcount_required) {
 			$current_section = $1;
 			next;
 		}
-		my ($offset, $type) = $line =~
-			/^[ \t]*([0-9a-fA-F]+)[ \t]+[0-9a-fA-F]+[ \t]+(R_ARM_\S+)/;
+		my ($offset, $info, $type) = $line =~
+			/^[ \t]*([0-9a-fA-F]+)[ \t]+([0-9a-fA-F]+)[ \t]+(R_ARM_\S+)/;
 		next unless defined $type;
 		if ($current_section eq '.rel__mcount_loc') {
 			$type eq 'R_ARM_ABS32' && hex($offset) == $location_count * 4
 				or die "$object: invalid __mcount_loc relocation at $offset\n";
+			# Each entry is relative to a symbol in the traced text
+			# section; an absolute or undefined base leaves the call
+			# address unrelocated in the final image.
+			my $base = $symbol_section{hex($info) >> 8};
+			defined($base) && $base =~ /^\d+$/ &&
+				$sections[$base] && $sections[$base]{flags} =~ /X/
+				or die "$object: __mcount_loc entry at $offset is not based in an executable section\n";
 			$location_count++;
 		} elsif ($current_section =~
 			/^\.rel(?:\.text(?:\..+)?|\.(?:init|ref|sched|spinlock|irqentry|kprobes)\.text)$/ &&

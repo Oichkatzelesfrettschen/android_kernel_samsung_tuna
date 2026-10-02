@@ -187,10 +187,17 @@ extern unsigned int user_debug;
 extern unsigned long cr_no_alignment;	/* defined in entry-armv.S */
 extern unsigned long cr_alignment;	/* defined in entry-armv.S */
 
+/*
+ * SCTLR changes through set_cr() and through the cache and MMU setup
+ * code, so a read must stay where it is written: volatile keeps the
+ * compiler from reusing an earlier value, and "memory" orders it against
+ * the surrounding page-table and alignment-word accesses.
+ */
 static inline unsigned int get_cr(void)
 {
 	unsigned int val;
-	asm("mrc p15, 0, %0, c1, c0, 0	@ get CR" : "=r" (val) : : "cc");
+	asm volatile("mrc p15, 0, %0, c1, c0, 0	@ get CR"
+	  : "=r" (val) : : "cc", "memory");
 	return val;
 }
 

@@ -508,6 +508,10 @@ static inline void local_flush_tlb_kernel_page(unsigned long kaddr)
  *	Clean (but don't drain the write buffer) if the CPU requires
  *	these operations.  This is typically used when we are removing
  *	PMD entries.
+ *
+ *	The clean operates on the line the caller has just stored the
+ *	entry into, and the asm names only the address, so the "memory"
+ *	clobber keeps the compiler from sinking that store below the mcr.
  */
 static inline void flush_pmd_entry(pmd_t *pmd)
 {
@@ -515,11 +519,11 @@ static inline void flush_pmd_entry(pmd_t *pmd)
 
 	if (tlb_flag(TLB_DCLEAN))
 		asm("mcr	p15, 0, %0, c7, c10, 1	@ flush_pmd"
-			: : "r" (pmd) : "cc");
+			: : "r" (pmd) : "cc", "memory");
 
 	if (tlb_flag(TLB_L2CLEAN_FR))
 		asm("mcr	p15, 1, %0, c15, c9, 1  @ L2 flush_pmd"
-			: : "r" (pmd) : "cc");
+			: : "r" (pmd) : "cc", "memory");
 
 	if (tlb_flag(TLB_WB))
 		dsb();
@@ -531,11 +535,11 @@ static inline void clean_pmd_entry(pmd_t *pmd)
 
 	if (tlb_flag(TLB_DCLEAN))
 		asm("mcr	p15, 0, %0, c7, c10, 1	@ flush_pmd"
-			: : "r" (pmd) : "cc");
+			: : "r" (pmd) : "cc", "memory");
 
 	if (tlb_flag(TLB_L2CLEAN_FR))
 		asm("mcr	p15, 1, %0, c15, c9, 1  @ L2 flush_pmd"
-			: : "r" (pmd) : "cc");
+			: : "r" (pmd) : "cc", "memory");
 }
 
 #undef tlb_flag
