@@ -715,6 +715,9 @@ static inline void security_free_mnt_opts(struct security_mnt_opts *opts)
  *	Retrieve the security identifier of the process @p.
  *	@p contains the task_struct for the process and place is into @secid.
  *	In case of failure, @secid will be set to zero.
+ * @cred_getsecid:
+ *	Retrieve the security identifier of @cred into @secid.
+ *	In case of failure, @secid will be set to zero.
  *
  * @task_setnice:
  *	Check permission before setting the nice value of @p to @nice.
@@ -1374,10 +1377,10 @@ static inline void security_free_mnt_opts(struct security_mnt_opts *opts)
 struct security_operations {
 	char name[SECURITY_NAME_MAX + 1];
 
-	int (*binder_set_context_mgr) (struct task_struct *mgr);
-	int (*binder_transaction) (struct task_struct *from, struct task_struct *to);
-	int (*binder_transfer_binder) (struct task_struct *from, struct task_struct *to);
-	int (*binder_transfer_file) (struct task_struct *from, struct task_struct *to, struct file *file);
+	int (*binder_set_context_mgr) (const struct cred *mgr);
+	int (*binder_transaction) (const struct cred *from, const struct cred *to);
+	int (*binder_transfer_binder) (const struct cred *from, const struct cred *to);
+	int (*binder_transfer_file) (const struct cred *from, const struct cred *to, struct file *file);
 
 	int (*ptrace_access_check) (struct task_struct *child, unsigned int mode);
 	int (*ptrace_traceme) (struct task_struct *parent);
@@ -1514,6 +1517,7 @@ struct security_operations {
 	int (*task_getpgid) (struct task_struct *p);
 	int (*task_getsid) (struct task_struct *p);
 	void (*task_getsecid) (struct task_struct *p, u32 *secid);
+	void (*cred_getsecid) (const struct cred *cred, u32 *secid);
 	int (*task_setnice) (struct task_struct *p, int nice);
 	int (*task_setioprio) (struct task_struct *p, int ioprio);
 	int (*task_getioprio) (struct task_struct *p);
@@ -1661,10 +1665,10 @@ extern int security_module_enable(struct security_operations *ops);
 extern int register_security(struct security_operations *ops);
 
 /* Security operations */
-int security_binder_set_context_mgr(struct task_struct *mgr);
-int security_binder_transaction(struct task_struct *from, struct task_struct *to);
-int security_binder_transfer_binder(struct task_struct *from, struct task_struct *to);
-int security_binder_transfer_file(struct task_struct *from, struct task_struct *to, struct file *file);
+int security_binder_set_context_mgr(const struct cred *mgr);
+int security_binder_transaction(const struct cred *from, const struct cred *to);
+int security_binder_transfer_binder(const struct cred *from, const struct cred *to);
+int security_binder_transfer_file(const struct cred *from, const struct cred *to, struct file *file);
 int security_ptrace_access_check(struct task_struct *child, unsigned int mode);
 int security_ptrace_traceme(struct task_struct *parent);
 int security_capget(struct task_struct *target,
@@ -1777,6 +1781,7 @@ int security_task_setpgid(struct task_struct *p, pid_t pgid);
 int security_task_getpgid(struct task_struct *p);
 int security_task_getsid(struct task_struct *p);
 void security_task_getsecid(struct task_struct *p, u32 *secid);
+void security_cred_getsecid(const struct cred *cred, u32 *secid);
 int security_task_setnice(struct task_struct *p, int nice);
 int security_task_setioprio(struct task_struct *p, int ioprio);
 int security_task_getioprio(struct task_struct *p);
@@ -1847,22 +1852,22 @@ static inline int security_init(void)
 	return 0;
 }
 
-static inline int security_binder_set_context_mgr(struct task_struct *mgr)
+static inline int security_binder_set_context_mgr(const struct cred *mgr)
 {
 	return 0;
 }
 
-static inline int security_binder_transaction(struct task_struct *from, struct task_struct *to)
+static inline int security_binder_transaction(const struct cred *from, const struct cred *to)
 {
 	return 0;
 }
 
-static inline int security_binder_transfer_binder(struct task_struct *from, struct task_struct *to)
+static inline int security_binder_transfer_binder(const struct cred *from, const struct cred *to)
 {
 	return 0;
 }
 
-static inline int security_binder_transfer_file(struct task_struct *from, struct task_struct *to, struct file *file)
+static inline int security_binder_transfer_file(const struct cred *from, const struct cred *to, struct file *file)
 {
 	return 0;
 }
@@ -2360,6 +2365,11 @@ static inline int security_task_getsid(struct task_struct *p)
 }
 
 static inline void security_task_getsecid(struct task_struct *p, u32 *secid)
+{
+	*secid = 0;
+}
+
+static inline void security_cred_getsecid(const struct cred *cred, u32 *secid)
 {
 	*secid = 0;
 }
