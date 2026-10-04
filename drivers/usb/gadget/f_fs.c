@@ -34,6 +34,8 @@
 #include <linux/usb/composite.h>
 #include <linux/usb/functionfs.h>
 
+#include <linux/aio.h>
+#include <linux/mmu_context.h>
 
 #define FUNCTIONFS_MAGIC	0xa647361 /* Chosen by a honest dice roll ;) */
 
@@ -353,6 +355,27 @@ struct ffs_epfile {
 	unsigned char			isoc;	/* P: ffs->eps_lock */
 
 	unsigned char			_pad;
+};
+
+/*  ffs_io_data structure ***************************************************/
+
+struct ffs_io_data {
+	bool aio;
+	bool read;
+
+	struct kiocb *kiocb;
+	const struct iovec *iovec;
+	unsigned long nr_segs;
+	char __user *buf;
+	size_t len;
+
+	struct mm_struct *mm;
+	struct work_struct work;
+
+	struct usb_ep *ep;
+	struct usb_request *req;
+
+	struct ffs_data *ffs;
 };
 
 static int  __must_check ffs_epfiles_create(struct ffs_data *ffs);
@@ -778,8 +801,73 @@ static void ffs_epfile_io_complete(struct usb_ep *_ep, struct usb_request *req)
 	}
 }
 
-static ssize_t ffs_epfile_io(struct file *file,
-			     char __user *buf, size_t len, int read)
+/*
+ * ffs_aio_cancel() reads kiocb->private and io_data->req under eps_lock, so
+ * io_data leaves the kiocb under the same lock before it is freed. The
+ * kiocb's file reference keeps ffs alive until aio_complete().
+ */
+static void ffs_aio_detach(struct ffs_io_data *io_data)
+{
+	spin_lock_irq(&io_data->ffs->eps_lock);
+	io_data->kiocb->private = NULL;
+	spin_unlock_irq(&io_data->ffs->eps_lock);
+}
+
+static void ffs_user_copy_worker(struct work_struct *work)
+{
+	struct ffs_io_data *io_data = container_of(work, struct ffs_io_data,
+						   work);
+	int ret = io_data->req->status ? io_data->req->status :
+					 io_data->req->actual;
+
+	if (io_data->read && ret > 0) {
+		mm_segment_t oldfs = get_fs();
+		size_t left = ret;
+		size_t pos = 0;
+		int i;
+
+		set_fs(USER_DS);
+		use_mm(io_data->mm);
+		for (i = 0; left && i < io_data->nr_segs; i++) {
+			size_t n = min_t(size_t, left,
+					 io_data->iovec[i].iov_len);
+
+			if (unlikely(copy_to_user(io_data->iovec[i].iov_base,
+						  &io_data->buf[pos], n))) {
+				ret = -EFAULT;
+				break;
+			}
+			pos += n;
+			left -= n;
+		}
+		unuse_mm(io_data->mm);
+		set_fs(oldfs);
+	}
+
+	ffs_aio_detach(io_data);
+
+	aio_complete(io_data->kiocb, ret, ret);
+
+	usb_ep_free_request(io_data->ep, io_data->req);
+
+	if (io_data->read)
+		kfree(io_data->iovec);
+	kfree(io_data->buf);
+	kfree(io_data);
+}
+
+static void ffs_epfile_async_io_complete(struct usb_ep *_ep,
+					 struct usb_request *req)
+{
+	struct ffs_io_data *io_data = req->context;
+
+	ENTER();
+
+	INIT_WORK(&io_data->work, ffs_user_copy_worker);
+	schedule_work(&io_data->work);
+}
+
+static ssize_t ffs_epfile_io(struct file *file, struct ffs_io_data *io_data)
 {
 	struct ffs_epfile *epfile = file->private_data;
 	struct ffs_ep *ep;
@@ -815,7 +903,7 @@ first_try:
 		}
 
 		/* Do we halt? */
-		halt = !read == !epfile->in;
+		halt = (!io_data->read == !epfile->in);
 		if (halt && epfile->isoc) {
 			ret = -EINVAL;
 			goto error;
@@ -823,14 +911,29 @@ first_try:
 
 		/* Allocate & copy */
 		if (!halt && !data) {
-			data = kzalloc(len, GFP_KERNEL);
+			data = kzalloc(io_data->len, GFP_KERNEL);
 			if (unlikely(!data))
 				return -ENOMEM;
 
-			if (!read &&
-			    unlikely(__copy_from_user(data, buf, len))) {
-				ret = -EFAULT;
-				goto error;
+			if (io_data->aio && !io_data->read) {
+				int i;
+				size_t pos = 0;
+				for (i = 0; i < io_data->nr_segs; i++) {
+					if (unlikely(copy_from_user(&data[pos],
+						     io_data->iovec[i].iov_base,
+						     io_data->iovec[i].iov_len))) {
+						ret = -EFAULT;
+						goto error;
+					}
+					pos += io_data->iovec[i].iov_len;
+				}
+			} else {
+				if (!io_data->read &&
+				    unlikely(__copy_from_user(data, io_data->buf,
+							      io_data->len))) {
+					ret = -EFAULT;
+					goto error;
+				}
 			}
 		}
 
@@ -860,31 +963,84 @@ first_try:
 		ret = -EBADMSG;
 	} else {
 		/* Fire the request */
-		DECLARE_COMPLETION_ONSTACK(done);
+		struct usb_request *req;
 
-		struct usb_request *req = ep->req;
-		req->context  = &done;
-		req->complete = ffs_epfile_io_complete;
-		req->buf      = data;
-		req->length   = len;
+		if (io_data->aio) {
+			/*
+			 * io_cancel() and aio_cancel_all() set KIF_CANCELLED
+			 * and call ki_cancel only after ffs_aio_set_cancel()
+			 * published it; ffs_aio_cancel() dequeues under
+			 * eps_lock. Testing the flag under eps_lock means a
+			 * cancelled kiocb either never queues its request or
+			 * has it dequeued by ffs_aio_cancel().
+			 */
+			if (unlikely(kiocbIsCancelled(io_data->kiocb))) {
+				ret = -EINTR;
+				goto error_lock;
+			}
 
-		ret = usb_ep_queue(ep->ep, req, GFP_ATOMIC);
+			req = usb_ep_alloc_request(ep->ep, GFP_ATOMIC);
+			if (unlikely(!req)) {
+				ret = -ENOMEM;
+				goto error_lock;
+			}
 
-		spin_unlock_irq(&epfile->ffs->eps_lock);
+			req->buf      = data;
+			req->length   = io_data->len;
 
-		if (unlikely(ret < 0)) {
-			/* nop */
-		} else if (unlikely(wait_for_completion_interruptible(&done))) {
-			ret = -EINTR;
-			usb_ep_dequeue(ep->ep, req);
+			io_data->buf = data;
+			io_data->ep = ep->ep;
+			io_data->req = req;
+
+			req->context  = io_data;
+			req->complete = ffs_epfile_async_io_complete;
+
+			ret = usb_ep_queue(ep->ep, req, GFP_ATOMIC);
+			if (unlikely(ret)) {
+				io_data->req = NULL;
+				usb_ep_free_request(ep->ep, req);
+				goto error_lock;
+			}
+			ret = -EIOCBQUEUED;
+			/* ffs_user_copy_worker() frees data. */
+			data = NULL;
+
+			spin_unlock_irq(&epfile->ffs->eps_lock);
 		} else {
-			ret = ep->status;
-			if (read && ret > 0 &&
-			    unlikely(copy_to_user(buf, data, ret)))
-				ret = -EFAULT;
+			DECLARE_COMPLETION_ONSTACK(done);
+
+			req = ep->req;
+			req->context  = &done;
+			req->complete = ffs_epfile_io_complete;
+			req->buf      = data;
+			req->length   = io_data->len;
+
+			ret = usb_ep_queue(ep->ep, req, GFP_ATOMIC);
+
+			spin_unlock_irq(&epfile->ffs->eps_lock);
+
+			if (unlikely(ret < 0)) {
+				/* nop */
+			} else if (unlikely(
+				   wait_for_completion_interruptible(&done))) {
+				ret = -EINTR;
+				usb_ep_dequeue(ep->ep, req);
+			} else {
+				ret = ep->status;
+				if (io_data->read && ret > 0 &&
+				    unlikely(copy_to_user(io_data->buf, data,
+							  ret)))
+					ret = -EFAULT;
+			}
 		}
 	}
 
+	mutex_unlock(&epfile->mutex);
+	kfree(data);
+	return ret;
+
+error_lock:
+	spin_unlock_irq(&epfile->ffs->eps_lock);
 	mutex_unlock(&epfile->mutex);
 error:
 	kfree(data);
@@ -895,17 +1051,31 @@ static ssize_t
 ffs_epfile_write(struct file *file, const char __user *buf, size_t len,
 		 loff_t *ptr)
 {
+	struct ffs_io_data io_data;
+
 	ENTER();
 
-	return ffs_epfile_io(file, (char __user *)buf, len, 0);
+	io_data.aio = false;
+	io_data.read = false;
+	io_data.buf = (char __user *)buf;
+	io_data.len = len;
+
+	return ffs_epfile_io(file, &io_data);
 }
 
 static ssize_t
 ffs_epfile_read(struct file *file, char __user *buf, size_t len, loff_t *ptr)
 {
+	struct ffs_io_data io_data;
+
 	ENTER();
 
-	return ffs_epfile_io(file, buf, len, 1);
+	io_data.aio = false;
+	io_data.read = true;
+	io_data.buf = buf;
+	io_data.len = len;
+
+	return ffs_epfile_io(file, &io_data);
 }
 
 static int
@@ -922,6 +1092,172 @@ ffs_epfile_open(struct inode *inode, struct file *file)
 	ffs_data_opened(epfile->ffs);
 
 	return 0;
+}
+
+/*
+ * do_readv_writev() and default_file_splice_read() hand a file that has
+ * aio_read/aio_write a sync kiocb and wait for it in wait_on_sync_kiocb(),
+ * uninterruptibly. Running each segment through the synchronous path keeps
+ * those callers on do_loop_readv_writev() semantics: one interruptible USB
+ * transfer per segment, stopping at the first short or failed one.
+ */
+static ssize_t ffs_epfile_sync_iov(struct file *file, const struct iovec *iov,
+				   unsigned long nr_segs, bool read)
+{
+	ssize_t ret = 0;
+
+	for (; nr_segs; ++iov, --nr_segs) {
+		struct ffs_io_data io_data;
+		ssize_t nr;
+
+		io_data.aio = false;
+		io_data.read = read;
+		io_data.buf = iov->iov_base;
+		io_data.len = iov->iov_len;
+
+		nr = ffs_epfile_io(file, &io_data);
+		if (nr < 0) {
+			if (!ret)
+				ret = nr;
+			break;
+		}
+		ret += nr;
+		if ((size_t)nr != iov->iov_len)
+			break;
+	}
+
+	return ret;
+}
+
+static int ffs_aio_cancel(struct kiocb *kiocb, struct io_event *e)
+{
+	struct ffs_epfile *epfile = kiocb->ki_filp->private_data;
+	struct ffs_io_data *io_data;
+	int value;
+
+	ENTER();
+
+	spin_lock_irq(&epfile->ffs->eps_lock);
+
+	io_data = kiocb->private;
+	if (likely(io_data && io_data->ep && io_data->req))
+		value = usb_ep_dequeue(io_data->ep, io_data->req);
+	else
+		value = -EINVAL;
+
+	spin_unlock_irq(&epfile->ffs->eps_lock);
+
+	/* usb_ep_dequeue() gives the request back with -ECONNRESET. */
+	if (!value)
+		e->res = -ECONNRESET;
+
+	/* Drop the reference io_cancel() and aio_cancel_all() took. */
+	aio_put_req(kiocb);
+
+	return value;
+}
+
+/*
+ * io_cancel() and aio_cancel_all() read ki_cancel and set KIF_CANCELLED
+ * under ctx_lock, so ki_cancel is published under the same lock: either
+ * the canceller calls ffs_aio_cancel(), or ffs_epfile_io() sees
+ * KIF_CANCELLED before it queues the request.
+ */
+static void ffs_aio_set_cancel(struct kiocb *kiocb)
+{
+	struct kioctx *ctx = kiocb->ki_ctx;
+
+	spin_lock_irq(&ctx->ctx_lock);
+	kiocb->ki_cancel = ffs_aio_cancel;
+	spin_unlock_irq(&ctx->ctx_lock);
+}
+
+static ssize_t ffs_epfile_aio_write(struct kiocb *kiocb,
+				    const struct iovec *iovec,
+				    unsigned long nr_segs, loff_t loff)
+{
+	struct ffs_epfile *epfile = kiocb->ki_filp->private_data;
+	struct ffs_io_data *io_data;
+	ssize_t res;
+
+	ENTER();
+
+	if (is_sync_kiocb(kiocb))
+		return ffs_epfile_sync_iov(kiocb->ki_filp, iovec, nr_segs,
+					   false);
+
+	io_data = kzalloc(sizeof(*io_data), GFP_KERNEL);
+	if (unlikely(!io_data))
+		return -ENOMEM;
+
+	io_data->aio = true;
+	io_data->read = false;
+	io_data->kiocb = kiocb;
+	io_data->iovec = iovec;
+	io_data->nr_segs = nr_segs;
+	io_data->len = kiocb->ki_nbytes;
+	io_data->mm = current->mm;
+	io_data->ffs = epfile->ffs;
+
+	kiocb->private = io_data;
+
+	ffs_aio_set_cancel(kiocb);
+
+	res = ffs_epfile_io(kiocb->ki_filp, io_data);
+	if (res != -EIOCBQUEUED) {
+		ffs_aio_detach(io_data);
+		kfree(io_data);
+	}
+	return res;
+}
+
+static ssize_t ffs_epfile_aio_read(struct kiocb *kiocb,
+				   const struct iovec *iovec,
+				   unsigned long nr_segs, loff_t loff)
+{
+	struct ffs_epfile *epfile = kiocb->ki_filp->private_data;
+	struct ffs_io_data *io_data;
+	struct iovec *iovec_copy;
+	ssize_t res;
+
+	ENTER();
+
+	if (is_sync_kiocb(kiocb))
+		return ffs_epfile_sync_iov(kiocb->ki_filp, iovec, nr_segs,
+					   true);
+
+	iovec_copy = kcalloc(nr_segs, sizeof(*iovec_copy), GFP_KERNEL);
+	if (unlikely(!iovec_copy))
+		return -ENOMEM;
+
+	memcpy(iovec_copy, iovec, sizeof(struct iovec)*nr_segs);
+
+	io_data = kzalloc(sizeof(*io_data), GFP_KERNEL);
+	if (unlikely(!io_data)) {
+		kfree(iovec_copy);
+		return -ENOMEM;
+	}
+
+	io_data->aio = true;
+	io_data->read = true;
+	io_data->kiocb = kiocb;
+	io_data->iovec = iovec_copy;
+	io_data->nr_segs = nr_segs;
+	io_data->len = kiocb->ki_nbytes;
+	io_data->mm = current->mm;
+	io_data->ffs = epfile->ffs;
+
+	kiocb->private = io_data;
+
+	ffs_aio_set_cancel(kiocb);
+
+	res = ffs_epfile_io(kiocb->ki_filp, io_data);
+	if (res != -EIOCBQUEUED) {
+		ffs_aio_detach(io_data);
+		kfree(io_data);
+		kfree(iovec_copy);
+	}
+	return res;
 }
 
 static int
@@ -1004,6 +1340,8 @@ static const struct file_operations ffs_epfile_operations = {
 	.open =		ffs_epfile_open,
 	.write =	ffs_epfile_write,
 	.read =		ffs_epfile_read,
+	.aio_write =	ffs_epfile_aio_write,
+	.aio_read =	ffs_epfile_aio_read,
 	.release =	ffs_epfile_release,
 	.unlocked_ioctl =	ffs_epfile_ioctl,
 };
