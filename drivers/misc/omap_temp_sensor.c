@@ -51,19 +51,43 @@
 
 #include <mach/ctrl_module_core_44xx.h>
 
-extern void omap_thermal_throttle(void);
-extern void omap_thermal_unthrottle(void);
+extern void omap_thermal_set_cap(unsigned int khz);
 
 static void throttle_delayed_work_fn(struct work_struct *work);
 
-#define THROTTLE_DELAY_MS	1000
-
-#define TSHUT_THRESHOLD_TSHUT_HOT	110000	/* 110 deg C */
-#define TSHUT_THRESHOLD_TSHUT_COLD	100000	/* 100 deg C */
-#define BGAP_THRESHOLD_T_HOT		64000	/* 64 deg C */
-#define BGAP_THRESHOLD_T_COLD		61000	/* 61 deg C */
+/*
+ * The bandgap sensor reads the die below its hotspot; TI's OMAP4460
+ * die-only fit puts the hotspot at 1.348 * sensor - 9.3 C. TSHUT at a
+ * 100 C sensor reading is a 125 C hotspot, the TI fatal limit.
+ */
+#define TSHUT_THRESHOLD_TSHUT_HOT	100000
+#define TSHUT_THRESHOLD_TSHUT_COLD	90000
 #define OMAP_ADC_START_VALUE	530
 #define OMAP_ADC_END_VALUE	923
+
+/*
+ * Thermal ladder, in sensor millidegrees. Reaching level n's trip caps the
+ * MPU at its cap; the hot alert window always sits at the next level's
+ * trip, so a fast climb escalates through several levels in one
+ * evaluation. A level steps down one at a time, once the sensor reads
+ * below its clear point after LADDER_DWELL_MS in that level. Level 3's
+ * 88 C trip is a 110 C hotspot, the OMAP4460 operating junction maximum.
+ */
+struct omap_thermal_level {
+	int trip;
+	int clear;
+	unsigned int cap_khz;
+};
+
+static const struct omap_thermal_level ladder[] = {
+	{ 0, 0, 0 },
+	{ 70000, 62000, 920000 },
+	{ 78000, 70000, 700000 },
+	{ 88000, 79000, 350000 },
+};
+
+#define LADDER_TOP		((int)ARRAY_SIZE(ladder) - 1)
+#define LADDER_DWELL_MS		2000
 
 /*
  * omap_temp_sensor structure
@@ -91,6 +115,9 @@ struct omap_temp_sensor {
 	unsigned long clk_rate;
 	u32 current_temp;
 	struct delayed_work throttle_work;
+	struct mutex ladder_lock;
+	int level;
+	unsigned long level_jiffies;
 };
 
 #ifdef CONFIG_PM
@@ -209,30 +236,106 @@ static int omap_read_current_temp(struct omap_temp_sensor *temp_sensor)
 	return adc_to_temp_conversion(adc);
 }
 
-static void omap_configure_temp_sensor_thresholds(struct omap_temp_sensor
-						  *temp_sensor)
+static void omap_configure_temp_sensor_tshut(struct omap_temp_sensor
+					     *temp_sensor)
 {
-	u32 temp = 0, t_hot, t_cold, tshut_hot, tshut_cold;
-
-	t_hot = temp_to_adc_conversion(BGAP_THRESHOLD_T_HOT);
-	t_cold = temp_to_adc_conversion(BGAP_THRESHOLD_T_COLD);
-
-	if ((t_hot == -EINVAL) || (t_cold == -EINVAL)) {
-		pr_err("%s:Temp thresholds out of bounds\n", __func__);
-		return;
-	}
-	temp |= ((t_hot << OMAP4_T_HOT_SHIFT) | (t_cold << OMAP4_T_COLD_SHIFT));
-	omap_temp_sensor_writel(temp_sensor, temp, BGAP_THRESHOLD_OFFSET);
+	int tshut_hot, tshut_cold;
 
 	tshut_hot = temp_to_adc_conversion(TSHUT_THRESHOLD_TSHUT_HOT);
 	tshut_cold = temp_to_adc_conversion(TSHUT_THRESHOLD_TSHUT_COLD);
-	if ((tshut_hot == -EINVAL) || (tshut_cold == -EINVAL)) {
+	if (tshut_hot < 0 || tshut_cold < 0) {
 		pr_err("%s:Temp shutdown thresholds out of bounds\n", __func__);
 		return;
 	}
-	temp |= ((tshut_hot << OMAP4_TSHUT_HOT_SHIFT)
-			| (tshut_cold << OMAP4_TSHUT_COLD_SHIFT));
-	omap_temp_sensor_writel(temp_sensor, temp, BGAP_TSHUT_OFFSET);
+	omap_temp_sensor_writel(temp_sensor,
+				(tshut_hot << OMAP4_TSHUT_HOT_SHIFT) |
+				(tshut_cold << OMAP4_TSHUT_COLD_SHIFT),
+				BGAP_TSHUT_OFFSET);
+}
+
+/*
+ * Programs the alert window for the current level: T_HOT at the next
+ * level's trip and T_COLD at this level's clear point. The hot alert is
+ * masked at the top level and the cold alert at level 0, so the alert
+ * line rises only on a crossing that changes the level.
+ */
+static void omap_ladder_program(struct omap_temp_sensor *temp_sensor)
+{
+	int level = temp_sensor->level;
+	int t_hot, t_cold;
+	u32 ctrl;
+
+	t_hot = temp_to_adc_conversion(level < LADDER_TOP ?
+				       ladder[level + 1].trip :
+				       ladder[level].trip);
+	t_cold = temp_to_adc_conversion(level ? ladder[level].clear :
+					ladder[1].clear);
+	if (t_hot < 0 || t_cold < 0) {
+		pr_err("%s:Temp thresholds out of bounds\n", __func__);
+		return;
+	}
+	omap_temp_sensor_writel(temp_sensor,
+				(t_hot << OMAP4_T_HOT_SHIFT) |
+				(t_cold << OMAP4_T_COLD_SHIFT),
+				BGAP_THRESHOLD_OFFSET);
+
+	ctrl = omap_temp_sensor_readl(temp_sensor, BGAP_CTRL_OFFSET);
+	ctrl &= ~(OMAP4_MASK_HOT_MASK | OMAP4_MASK_COLD_MASK);
+	if (level < LADDER_TOP)
+		ctrl |= OMAP4_MASK_HOT_MASK;
+	if (level)
+		ctrl |= OMAP4_MASK_COLD_MASK;
+	omap_temp_sensor_writel(temp_sensor, ctrl, BGAP_CTRL_OFFSET);
+}
+
+/*
+ * Moves the ladder to the level the sensor reading calls for, applies its
+ * MPU cap and reprograms the alert window. An unreadable sensor holds the
+ * level; the hardware TSHUT comparator stays armed either way. While
+ * throttled the evaluation repeats every LADDER_DWELL_MS, which is what
+ * steps the ladder down.
+ */
+static void omap_ladder_evaluate(struct omap_temp_sensor *temp_sensor,
+				 int force)
+{
+	int temp, level;
+
+	mutex_lock(&temp_sensor->ladder_lock);
+
+	level = temp_sensor->level;
+	temp = omap_read_current_temp(temp_sensor);
+	if (force > 0 && level < LADDER_TOP) {
+		level++;
+	} else if (force < 0) {
+		level = 0;
+	} else if (temp >= 0) {
+		while (level < LADDER_TOP && temp >= ladder[level + 1].trip)
+			level++;
+		if (level == temp_sensor->level && level &&
+		    temp < ladder[level].clear &&
+		    time_after_eq(jiffies, temp_sensor->level_jiffies +
+				  msecs_to_jiffies(LADDER_DWELL_MS)))
+			level--;
+	}
+
+	if (level != temp_sensor->level) {
+		temp_sensor->level = level;
+		temp_sensor->level_jiffies = jiffies;
+		omap_ladder_program(temp_sensor);
+		pr_info("%s: level %d at %d mC, cap %u kHz, threshold 0x%08lx, tshut 0x%08lx\n",
+			__func__, level, temp, ladder[level].cap_khz,
+			omap_temp_sensor_readl(temp_sensor,
+					       BGAP_THRESHOLD_OFFSET),
+			omap_temp_sensor_readl(temp_sensor,
+					       BGAP_TSHUT_OFFSET));
+	}
+	omap_thermal_set_cap(ladder[temp_sensor->level].cap_khz);
+
+	if (temp_sensor->level)
+		schedule_delayed_work(&temp_sensor->throttle_work,
+				      msecs_to_jiffies(LADDER_DWELL_MS));
+
+	mutex_unlock(&temp_sensor->ladder_lock);
 }
 
 static void omap_configure_temp_sensor_counter(struct omap_temp_sensor
@@ -270,22 +373,37 @@ static ssize_t omap_temp_show_current(struct device *dev,
 	return sprintf(buf, "%d\n", omap_read_current_temp(temp_sensor));
 }
 
+/*
+ * Writing 1 raises the ladder one level and 0 drops it to level 0; the
+ * periodic evaluation then moves it to the level the sensor calls for.
+ */
 static ssize_t omap_throttle_store(struct device *dev,
 	struct device_attribute *devattr, const char *buf, size_t count)
 {
-	if (count && buf[0] == '1')
-		omap_thermal_throttle();
-	else
-		omap_thermal_unthrottle();
+	struct omap_temp_sensor *temp_sensor =
+		platform_get_drvdata(to_platform_device(dev));
+
+	omap_ladder_evaluate(temp_sensor, count && buf[0] == '1' ? 1 : -1);
 
 	return count;
 }
 
+static ssize_t omap_level_show(struct device *dev,
+			       struct device_attribute *devattr, char *buf)
+{
+	struct omap_temp_sensor *temp_sensor =
+		platform_get_drvdata(to_platform_device(dev));
+
+	return sprintf(buf, "%d\n", temp_sensor->level);
+}
+
 static DEVICE_ATTR(temperature, S_IRUGO, omap_temp_show_current, NULL);
 static DEVICE_ATTR(throttle, S_IWUSR, NULL, omap_throttle_store);
+static DEVICE_ATTR(level, S_IRUGO, omap_level_show, NULL);
 static struct attribute *omap_temp_sensor_attributes[] = {
 	&dev_attr_temperature.attr,
 	&dev_attr_throttle.attr,
+	&dev_attr_level.attr,
 	NULL
 };
 
@@ -374,32 +492,13 @@ out:
 	return ret;
 }
 
-/*
- * Check if the die sensor is cooling down. If it's higher than
- * t_hot since the last throttle then throttle it again.
- * OMAP junction temperature could stay for a long time in an
- * unacceptable temperature range. The idea here is to check after
- * t_hot->throttle the system really came below t_hot else re-throttle
- * and keep doing till it's under t_hot temp range.
- */
 static void throttle_delayed_work_fn(struct work_struct *work)
 {
-	int curr;
 	struct omap_temp_sensor *temp_sensor =
 				container_of(work, struct omap_temp_sensor,
 					     throttle_work.work);
-	curr = omap_read_current_temp(temp_sensor);
 
-	if (curr >= BGAP_THRESHOLD_T_HOT || curr < 0) {
-		pr_warn("%s: OMAP temp read %d exceeds the threshold\n",
-			__func__, curr);
-		omap_thermal_throttle();
-		schedule_delayed_work(&temp_sensor->throttle_work,
-			msecs_to_jiffies(THROTTLE_DELAY_MS));
-	} else {
-		schedule_delayed_work(&temp_sensor->throttle_work,
-			msecs_to_jiffies(THROTTLE_DELAY_MS));
-	}
+	omap_ladder_evaluate(temp_sensor, 0);
 }
 
 static irqreturn_t omap_tshut_irq_handler(int irq, void *data)
@@ -422,28 +521,7 @@ static irqreturn_t omap_tshut_irq_handler(int irq, void *data)
 
 static irqreturn_t omap_talert_irq_handler(int irq, void *data)
 {
-	struct omap_temp_sensor *temp_sensor = (struct omap_temp_sensor *)data;
-	int t_hot, t_cold, temp_offset;
-
-	t_hot = omap_temp_sensor_readl(temp_sensor, BGAP_STATUS_OFFSET)
-	    & OMAP4_HOT_FLAG_MASK;
-	t_cold = omap_temp_sensor_readl(temp_sensor, BGAP_STATUS_OFFSET)
-	    & OMAP4_COLD_FLAG_MASK;
-	temp_offset = omap_temp_sensor_readl(temp_sensor, BGAP_CTRL_OFFSET);
-	if (t_hot) {
-		omap_thermal_throttle();
-		schedule_delayed_work(&temp_sensor->throttle_work,
-			msecs_to_jiffies(THROTTLE_DELAY_MS));
-		temp_offset &= ~(OMAP4_MASK_HOT_MASK);
-		temp_offset |= OMAP4_MASK_COLD_MASK;
-	} else if (t_cold) {
-		cancel_delayed_work_sync(&temp_sensor->throttle_work);
-		omap_thermal_unthrottle();
-		temp_offset &= ~(OMAP4_MASK_COLD_MASK);
-		temp_offset |= OMAP4_MASK_HOT_MASK;
-	}
-
-	omap_temp_sensor_writel(temp_sensor, temp_offset, BGAP_CTRL_OFFSET);
+	omap_ladder_evaluate(data, 0);
 
 	return IRQ_HANDLED;
 }
@@ -454,7 +532,7 @@ static int __devinit omap_temp_sensor_probe(struct platform_device *pdev)
 	struct omap_temp_sensor_pdata *pdata = pdev->dev.platform_data;
 	struct omap_temp_sensor *temp_sensor;
 	struct resource *mem;
-	int ret = 0, val;
+	int ret = 0;
 
 	if (!pdata) {
 		dev_err(dev, "%s: platform data missing\n", __func__);
@@ -466,6 +544,7 @@ static int __devinit omap_temp_sensor_probe(struct platform_device *pdev)
 		return -ENOMEM;
 
 	spin_lock_init(&temp_sensor->lock);
+	mutex_init(&temp_sensor->ladder_lock);
 
 	mem = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	if (!mem) {
@@ -534,7 +613,8 @@ static int __devinit omap_temp_sensor_probe(struct platform_device *pdev)
 	}
 
 	omap_enable_continuous_mode(temp_sensor);
-	omap_configure_temp_sensor_thresholds(temp_sensor);
+	omap_configure_temp_sensor_tshut(temp_sensor);
+	omap_ladder_program(temp_sensor);
 	/* 1 ms */
 	omap_configure_temp_sensor_counter(temp_sensor, 1);
 
@@ -571,15 +651,11 @@ static int __devinit omap_temp_sensor_probe(struct platform_device *pdev)
 		goto sysfs_create_err;
 	}
 
-	/* unmask the T_COLD and unmask T_HOT at init */
-	val = omap_temp_sensor_readl(temp_sensor, BGAP_CTRL_OFFSET);
-	val |= OMAP4_MASK_COLD_MASK;
-	val |= OMAP4_MASK_HOT_MASK;
-	omap_temp_sensor_writel(temp_sensor, val, BGAP_CTRL_OFFSET);
-
 	dev_info(dev, "%s probed", pdata->name);
 
 	temp_sensor_pm = temp_sensor;
+
+	omap_ladder_evaluate(temp_sensor, 0);
 
 	return 0;
 
