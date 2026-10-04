@@ -827,10 +827,10 @@ quiet_cmd_vmlinux-modpost = LTO     $@
 	echo "__crc_softirq_work_list = 0 ;" >> vmlinux.symversions; \
 	NM=$(NM) $(PERL) $(srctree)/scripts/generate-tuna-initcall-order.pl \
 		$(vmlinux-all) > vmlinux.initcalls.lds; \
-	mkdir -p .thinlto-cache; \
+	$(CONFIG_SHELL) $(srctree)/scripts/thinlto-cache-guard .thinlto-cache/vmlinux \
 	$(LD) $(LDFLAGS) -r --fatal-warnings --thinlto-jobs=2 \
 		--mllvm=-import-instr-limit=5 \
-		--thinlto-cache-dir=.thinlto-cache \
+		--thinlto-cache-dir=.thinlto-cache/vmlinux \
 		--thinlto-cache-policy=cache_size_bytes=8589934592:cache_size_files=10000 \
 		-T vmlinux.symversions -T vmlinux.initcalls.lds \
 		-o $@ --whole-archive $(vmlinux-native-inputs) --no-whole-archive; \
@@ -1012,7 +1012,8 @@ endif
 
 modpost-init := $(if $(CONFIG_LTO_CLANG_THIN),$(vmlinux-init),$(filter-out init/built-in.o, $(vmlinux-init)))
 thinlto-prelink-sources := $(srctree)/scripts/generate-tuna-initcall-order.pl \
-	$(srctree)/scripts/validate-tuna-lto-prelink.pl
+	$(srctree)/scripts/validate-tuna-lto-prelink.pl \
+	$(srctree)/scripts/thinlto-cache-guard
 ifeq ($(CONFIG_FTRACE_MCOUNT_RECORD),y)
 thinlto-prelink-sources += $(srctree)/scripts/recordmcount.c \
 	$(srctree)/scripts/recordmcount.h \

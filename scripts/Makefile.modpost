@@ -100,7 +100,8 @@ __modpost: $(modpost-objects) FORCE
 
 ifeq ($(CONFIG_LTO_CLANG_THIN),y)
 thinlto_module_cache := $(if $(KBUILD_EXTMOD),$(firstword $(KBUILD_EXTMOD))/.thinlto-cache,$(objtree)/.thinlto-cache)
-thinlto_module_sources := $(srctree)/scripts/validate-module-sections.pl
+thinlto_module_sources := $(srctree)/scripts/validate-module-sections.pl \
+	$(srctree)/scripts/thinlto-cache-guard
 ifeq ($(CONFIG_FTRACE_MCOUNT_RECORD),y)
 thinlto_module_sources += $(srctree)/scripts/recordmcount.c \
 	$(srctree)/scripts/recordmcount.h \
@@ -109,10 +110,10 @@ endif
 quiet_cmd_lto_mod = LTO [M] $@
       cmd_lto_mod = set -e; set --; \
 	if [ -s "$<.symversions" ]; then set -- -T "$<.symversions"; fi; \
-	mkdir -p "$(thinlto_module_cache)"; \
+	$(CONFIG_SHELL) $(srctree)/scripts/thinlto-cache-guard "$(thinlto_module_cache)/$(subst /,_,$@)" \
 	$(LD) $(LDFLAGS) -r --fatal-warnings --thinlto-jobs=2 \
 		--mllvm=-import-instr-limit=5 \
-		--thinlto-cache-dir="$(thinlto_module_cache)" \
+		--thinlto-cache-dir="$(thinlto_module_cache)/$(subst /,_,$@)" \
 		--thinlto-cache-policy=cache_size_bytes=8589934592:cache_size_files=10000 \
 		"$$@" -o $@ --whole-archive $< --no-whole-archive; \
 	$(if $(CONFIG_FTRACE_MCOUNT_RECORD),$(objtree)/scripts/recordmcount $@; ) \
