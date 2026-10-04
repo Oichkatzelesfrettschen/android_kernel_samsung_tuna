@@ -586,6 +586,20 @@ CC_FLAGS_LTO := -flto=thin -fsplit-lto-unit
 DISABLE_LTO := -fno-lto
 KBUILD_CFLAGS += $(CC_FLAGS_LTO)
 export CC_FLAGS_LTO DISABLE_LTO
+
+# The ThinLTO cache directory comes from KBUILD_THINLTO_CACHE (an absolute
+# path) and is absent by default. A cache hit replays a module's native
+# object without running its code generation, so codegen diagnostics (a frame
+# over -Wframe-larger-than, inline-asm errors) never reach the
+# --fatal-warnings of the relocatable link, and LLD writes an entry before
+# that link fails, so a retry passes. Without the variable every link runs
+# code generation for every module and reports its diagnostics; with it the
+# link keeps the entries for local iteration.
+ifneq ($(KBUILD_THINLTO_CACHE),)
+KBUILD_THINLTO_CACHE_FLAGS := --thinlto-cache-dir="$(KBUILD_THINLTO_CACHE)" \
+	--thinlto-cache-policy=cache_size_bytes=8589934592:cache_size_files=10000
+endif
+export KBUILD_THINLTO_CACHE KBUILD_THINLTO_CACHE_FLAGS
 endif
 
 ifneq ($(CONFIG_FRAME_WARN),0)
@@ -827,11 +841,10 @@ quiet_cmd_vmlinux-modpost = LTO     $@
 	echo "__crc_softirq_work_list = 0 ;" >> vmlinux.symversions; \
 	NM=$(NM) $(PERL) $(srctree)/scripts/generate-tuna-initcall-order.pl \
 		$(vmlinux-all) > vmlinux.initcalls.lds; \
-	mkdir -p .thinlto-cache; \
+	$(if $(KBUILD_THINLTO_CACHE),mkdir -p "$(KBUILD_THINLTO_CACHE)";) \
 	$(LD) $(LDFLAGS) -r --fatal-warnings --thinlto-jobs=2 \
 		--mllvm=-import-instr-limit=5 \
-		--thinlto-cache-dir=.thinlto-cache \
-		--thinlto-cache-policy=cache_size_bytes=8589934592:cache_size_files=10000 \
+		$(KBUILD_THINLTO_CACHE_FLAGS) \
 		-T vmlinux.symversions -T vmlinux.initcalls.lds \
 		-o $@ --whole-archive $(vmlinux-native-inputs) --no-whole-archive; \
 	$(PERL) $(srctree)/scripts/validate-tuna-lto-prelink.pl $(READELF) $@; \
@@ -1514,8 +1527,12 @@ clean: $(clean-dirs)
 		-o -name 'modules.order' \
 		-o -name modules.builtin -o -name '.tmp_*.o.*' \
 		-o -name '*.gcno' \) -type f -print | xargs rm -f
-	@if [ -d "$(if $(KBUILD_EXTMOD),$(firstword $(KBUILD_EXTMOD))/.thinlto-cache,.thinlto-cache)" ]; then \
-		find "$(if $(KBUILD_EXTMOD),$(firstword $(KBUILD_EXTMOD))/.thinlto-cache,.thinlto-cache)" -depth -delete; \
+	@if [ -n "$(KBUILD_THINLTO_CACHE)" ] && [ -d "$(KBUILD_THINLTO_CACHE)" ]; then \
+		find "$(KBUILD_THINLTO_CACHE)" -maxdepth 1 -type f \
+			\( -name 'llvmcache-*' -o -name llvmcache.timestamp \) -delete; \
+	fi
+	@if [ -d .thinlto-cache ]; then \
+		find .thinlto-cache -depth -delete; \
 	fi
 
 # Generate tags for editors
