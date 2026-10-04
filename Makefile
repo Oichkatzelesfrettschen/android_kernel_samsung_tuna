@@ -596,7 +596,7 @@ export CC_FLAGS_LTO DISABLE_LTO
 # code generation for every module and reports its diagnostics; with it the
 # link keeps the entries for local iteration.
 ifneq ($(KBUILD_THINLTO_CACHE),)
-KBUILD_THINLTO_CACHE_FLAGS := --thinlto-cache-dir=$(KBUILD_THINLTO_CACHE) \
+KBUILD_THINLTO_CACHE_FLAGS := --thinlto-cache-dir="$(KBUILD_THINLTO_CACHE)" \
 	--thinlto-cache-policy=cache_size_bytes=8589934592:cache_size_files=10000
 endif
 export KBUILD_THINLTO_CACHE KBUILD_THINLTO_CACHE_FLAGS
@@ -1528,7 +1528,11 @@ clean: $(clean-dirs)
 		-o -name modules.builtin -o -name '.tmp_*.o.*' \
 		-o -name '*.gcno' \) -type f -print | xargs rm -f
 	@if [ -n "$(KBUILD_THINLTO_CACHE)" ] && [ -d "$(KBUILD_THINLTO_CACHE)" ]; then \
-		find "$(KBUILD_THINLTO_CACHE)" -depth -delete; \
+		find "$(KBUILD_THINLTO_CACHE)" -maxdepth 1 -type f \
+			\( -name 'llvmcache-*' -o -name llvmcache.timestamp \) -delete; \
+	fi
+	@if [ -d .thinlto-cache ]; then \
+		find .thinlto-cache -depth -delete; \
 	fi
 
 # Generate tags for editors
