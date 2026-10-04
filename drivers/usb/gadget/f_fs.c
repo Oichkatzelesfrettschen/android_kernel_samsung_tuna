@@ -1060,6 +1060,41 @@ ffs_epfile_open(struct inode *inode, struct file *file)
 	return 0;
 }
 
+/*
+ * do_readv_writev() and default_file_splice_read() hand a file that has
+ * aio_read/aio_write a sync kiocb and wait for it in wait_on_sync_kiocb(),
+ * uninterruptibly. Running each segment through the synchronous path keeps
+ * those callers on do_loop_readv_writev() semantics: one interruptible USB
+ * transfer per segment, stopping at the first short or failed one.
+ */
+static ssize_t ffs_epfile_sync_iov(struct file *file, const struct iovec *iov,
+				   unsigned long nr_segs, bool read)
+{
+	ssize_t ret = 0;
+
+	for (; nr_segs; ++iov, --nr_segs) {
+		struct ffs_io_data io_data;
+		ssize_t nr;
+
+		io_data.aio = false;
+		io_data.read = read;
+		io_data.buf = iov->iov_base;
+		io_data.len = iov->iov_len;
+
+		nr = ffs_epfile_io(file, &io_data);
+		if (nr < 0) {
+			if (!ret)
+				ret = nr;
+			break;
+		}
+		ret += nr;
+		if ((size_t)nr != iov->iov_len)
+			break;
+	}
+
+	return ret;
+}
+
 static int ffs_aio_cancel(struct kiocb *kiocb, struct io_event *e)
 {
 	struct ffs_io_data *io_data = kiocb->private;
@@ -1092,6 +1127,10 @@ static ssize_t ffs_epfile_aio_write(struct kiocb *kiocb,
 
 	ENTER();
 
+	if (is_sync_kiocb(kiocb))
+		return ffs_epfile_sync_iov(kiocb->ki_filp, iovec, nr_segs,
+					   false);
+
 	io_data = kmalloc(sizeof(*io_data), GFP_KERNEL);
 	if (unlikely(!io_data))
 		return -ENOMEM;
@@ -1123,6 +1162,10 @@ static ssize_t ffs_epfile_aio_read(struct kiocb *kiocb,
 	ssize_t res;
 
 	ENTER();
+
+	if (is_sync_kiocb(kiocb))
+		return ffs_epfile_sync_iov(kiocb->ki_filp, iovec, nr_segs,
+					   true);
 
 	iovec_copy = kcalloc(nr_segs, sizeof(*iovec_copy), GFP_KERNEL);
 	if (unlikely(!iovec_copy))
