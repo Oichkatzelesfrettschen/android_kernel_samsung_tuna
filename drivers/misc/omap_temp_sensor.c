@@ -56,12 +56,12 @@ extern void omap_thermal_set_cap(unsigned int khz);
 static void throttle_delayed_work_fn(struct work_struct *work);
 
 /*
- * The bandgap sensor reads the die below its hotspot; TI's OMAP4460
- * die-only fit puts the hotspot at 1.348 * sensor - 9.3 C. TSHUT at a
- * 100 C sensor reading is a 125 C hotspot, the TI fatal limit.
+ * The hardware TSHUT comparator resets the SoC at a 108 C sensor reading
+ * and releases at 98 C; the ladder's 350 MHz level starts 9 C below the
+ * reset.
  */
-#define TSHUT_THRESHOLD_TSHUT_HOT	100000
-#define TSHUT_THRESHOLD_TSHUT_COLD	90000
+#define TSHUT_THRESHOLD_TSHUT_HOT	108000
+#define TSHUT_THRESHOLD_TSHUT_COLD	98000
 #define OMAP_ADC_START_VALUE	530
 #define OMAP_ADC_END_VALUE	923
 
@@ -70,8 +70,7 @@ static void throttle_delayed_work_fn(struct work_struct *work);
  * MPU at its cap; the hot alert window always sits at the next level's
  * trip, so a fast climb escalates through several levels in one
  * evaluation. A level steps down one at a time, once the sensor reads
- * below its clear point after LADDER_DWELL_MS in that level. Level 3's
- * 88 C trip is a 110 C hotspot, the OMAP4460 operating junction maximum.
+ * below its clear point after LADDER_DWELL_MS in that level.
  */
 struct omap_thermal_level {
 	int trip;
@@ -83,7 +82,7 @@ static const struct omap_thermal_level ladder[] = {
 	{ 0, 0, 0 },
 	{ 70000, 62000, 920000 },
 	{ 78000, 70000, 700000 },
-	{ 88000, 79000, 350000 },
+	{ 99000, 90000, 350000 },
 };
 
 #define LADDER_TOP		((int)ARRAY_SIZE(ladder) - 1)
