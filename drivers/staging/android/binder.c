@@ -4194,7 +4194,21 @@ static int binder_wait_for_work(struct binder_thread *thread,
 	}
 	finish_wait(&thread->wait, &wait);
 	binder_inner_proc_unlock(proc);
-	freezer_count();
+	/*
+	 * refrigerator() recalculates TIF_SIGPENDING when it clears the
+	 * freezer's fake signal, and the ARM syscall exit restarts a call only
+	 * from do_signal(). A thread that froze here after a freezer wakeup
+	 * would return -ERESTARTSYS to userspace with no signal pending, which
+	 * libbinder treats as fatal. On -ERESTARTSYS the thread keeps
+	 * TIF_SIGPENDING, freezes in get_signal_to_deliver(), and
+	 * BINDER_WRITE_READ restarts.
+	 */
+	if (ret) {
+		if (current->mm)
+			current->flags &= ~PF_FREEZER_SKIP;
+	} else {
+		freezer_count();
+	}
 
 	return ret;
 }
