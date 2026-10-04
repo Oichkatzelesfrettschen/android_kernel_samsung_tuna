@@ -34,6 +34,9 @@ subdir-ccflags-y :=
 -include include/config/auto.conf
 
 include scripts/Kbuild.include
+ifneq ($(LLVM),)
+include scripts/Makefile.llvm
+endif
 
 # For backward compatibility check that these variables do not change
 save-cflags := $(CFLAGS)
