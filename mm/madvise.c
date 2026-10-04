@@ -34,6 +34,26 @@ static int madvise_need_mmap_write(int behavior)
 }
 
 /*
+ * MADV_WIPEONFORK is only supported on anonymous, private mappings that
+ * carry no file and no huge pages, matching dup_mmap()'s VM_WIPEONFORK
+ * check, which skips copy_page_range() for the vma instead of tracking
+ * a partial wipe.
+ */
+static int madvise_wipeonfork_or_keeponfork(struct vm_area_struct *vma,
+					     unsigned long *new_flags,
+					     int behavior)
+{
+	if (behavior == MADV_WIPEONFORK) {
+		if ((vma->vm_flags & (VM_SHARED | VM_HUGETLB)) || vma->vm_file)
+			return -EINVAL;
+		*new_flags |= VM_WIPEONFORK;
+	} else if (behavior == MADV_KEEPONFORK) {
+		*new_flags &= ~VM_WIPEONFORK;
+	}
+	return 0;
+}
+
+/*
  * We can potentially split a vm area into separate
  * areas, each area with its own behavior.
  */
@@ -75,6 +95,12 @@ static long madvise_behavior(struct vm_area_struct * vma,
 	case MADV_HUGEPAGE:
 	case MADV_NOHUGEPAGE:
 		error = hugepage_madvise(vma, &new_flags, behavior);
+		if (error)
+			goto out;
+		break;
+	case MADV_WIPEONFORK:
+	case MADV_KEEPONFORK:
+		error = madvise_wipeonfork_or_keeponfork(vma, &new_flags, behavior);
 		if (error)
 			goto out;
 		break;
@@ -304,6 +330,8 @@ madvise_behavior_valid(int behavior)
 	case MADV_HUGEPAGE:
 	case MADV_NOHUGEPAGE:
 #endif
+	case MADV_WIPEONFORK:
+	case MADV_KEEPONFORK:
 		return 1;
 
 	default:
