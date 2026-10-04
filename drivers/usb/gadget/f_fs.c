@@ -374,6 +374,8 @@ struct ffs_io_data {
 
 	struct usb_ep *ep;
 	struct usb_request *req;
+
+	struct ffs_data *ffs;
 };
 
 static int  __must_check ffs_epfiles_create(struct ffs_data *ffs);
@@ -799,6 +801,18 @@ static void ffs_epfile_io_complete(struct usb_ep *_ep, struct usb_request *req)
 	}
 }
 
+/*
+ * ffs_aio_cancel() reads kiocb->private and io_data->req under eps_lock, so
+ * io_data leaves the kiocb under the same lock before it is freed. The
+ * kiocb's file reference keeps ffs alive until aio_complete().
+ */
+static void ffs_aio_detach(struct ffs_io_data *io_data)
+{
+	spin_lock_irq(&io_data->ffs->eps_lock);
+	io_data->kiocb->private = NULL;
+	spin_unlock_irq(&io_data->ffs->eps_lock);
+}
+
 static void ffs_user_copy_worker(struct work_struct *work)
 {
 	struct ffs_io_data *io_data = container_of(work, struct ffs_io_data,
@@ -825,6 +839,8 @@ static void ffs_user_copy_worker(struct work_struct *work)
 		unuse_mm(io_data->mm);
 		set_fs(oldfs);
 	}
+
+	ffs_aio_detach(io_data);
 
 	aio_complete(io_data->kiocb, ret, ret);
 
@@ -946,6 +962,19 @@ first_try:
 		struct usb_request *req;
 
 		if (io_data->aio) {
+			/*
+			 * io_cancel() and aio_cancel_all() set KIF_CANCELLED
+			 * and call ki_cancel only after ffs_aio_set_cancel()
+			 * published it; ffs_aio_cancel() dequeues under
+			 * eps_lock. Testing the flag under eps_lock means a
+			 * cancelled kiocb either never queues its request or
+			 * has it dequeued by ffs_aio_cancel().
+			 */
+			if (unlikely(kiocbIsCancelled(io_data->kiocb))) {
+				ret = -EINTR;
+				goto error_lock;
+			}
+
 			req = usb_ep_alloc_request(ep->ep, GFP_ATOMIC);
 			if (unlikely(!req)) {
 				ret = -ENOMEM;
@@ -964,6 +993,7 @@ first_try:
 
 			ret = usb_ep_queue(ep->ep, req, GFP_ATOMIC);
 			if (unlikely(ret)) {
+				io_data->req = NULL;
 				usb_ep_free_request(ep->ep, req);
 				goto error_lock;
 			}
@@ -1097,14 +1127,15 @@ static ssize_t ffs_epfile_sync_iov(struct file *file, const struct iovec *iov,
 
 static int ffs_aio_cancel(struct kiocb *kiocb, struct io_event *e)
 {
-	struct ffs_io_data *io_data = kiocb->private;
 	struct ffs_epfile *epfile = kiocb->ki_filp->private_data;
+	struct ffs_io_data *io_data;
 	int value;
 
 	ENTER();
 
 	spin_lock_irq(&epfile->ffs->eps_lock);
 
+	io_data = kiocb->private;
 	if (likely(io_data && io_data->ep && io_data->req))
 		value = usb_ep_dequeue(io_data->ep, io_data->req);
 	else
@@ -1112,16 +1143,36 @@ static int ffs_aio_cancel(struct kiocb *kiocb, struct io_event *e)
 
 	spin_unlock_irq(&epfile->ffs->eps_lock);
 
+	/* usb_ep_dequeue() gives the request back with -ECONNRESET. */
+	if (!value)
+		e->res = -ECONNRESET;
+
 	/* Drop the reference io_cancel() and aio_cancel_all() took. */
 	aio_put_req(kiocb);
 
 	return value;
 }
 
+/*
+ * io_cancel() and aio_cancel_all() read ki_cancel and set KIF_CANCELLED
+ * under ctx_lock, so ki_cancel is published under the same lock: either
+ * the canceller calls ffs_aio_cancel(), or ffs_epfile_io() sees
+ * KIF_CANCELLED before it queues the request.
+ */
+static void ffs_aio_set_cancel(struct kiocb *kiocb)
+{
+	struct kioctx *ctx = kiocb->ki_ctx;
+
+	spin_lock_irq(&ctx->ctx_lock);
+	kiocb->ki_cancel = ffs_aio_cancel;
+	spin_unlock_irq(&ctx->ctx_lock);
+}
+
 static ssize_t ffs_epfile_aio_write(struct kiocb *kiocb,
 				    const struct iovec *iovec,
 				    unsigned long nr_segs, loff_t loff)
 {
+	struct ffs_epfile *epfile = kiocb->ki_filp->private_data;
 	struct ffs_io_data *io_data;
 	ssize_t res;
 
@@ -1131,7 +1182,7 @@ static ssize_t ffs_epfile_aio_write(struct kiocb *kiocb,
 		return ffs_epfile_sync_iov(kiocb->ki_filp, iovec, nr_segs,
 					   false);
 
-	io_data = kmalloc(sizeof(*io_data), GFP_KERNEL);
+	io_data = kzalloc(sizeof(*io_data), GFP_KERNEL);
 	if (unlikely(!io_data))
 		return -ENOMEM;
 
@@ -1142,14 +1193,17 @@ static ssize_t ffs_epfile_aio_write(struct kiocb *kiocb,
 	io_data->nr_segs = nr_segs;
 	io_data->len = kiocb->ki_nbytes;
 	io_data->mm = current->mm;
+	io_data->ffs = epfile->ffs;
 
 	kiocb->private = io_data;
 
-	kiocb->ki_cancel = ffs_aio_cancel;
+	ffs_aio_set_cancel(kiocb);
 
 	res = ffs_epfile_io(kiocb->ki_filp, io_data);
-	if (res != -EIOCBQUEUED)
+	if (res != -EIOCBQUEUED) {
+		ffs_aio_detach(io_data);
 		kfree(io_data);
+	}
 	return res;
 }
 
@@ -1157,6 +1211,7 @@ static ssize_t ffs_epfile_aio_read(struct kiocb *kiocb,
 				   const struct iovec *iovec,
 				   unsigned long nr_segs, loff_t loff)
 {
+	struct ffs_epfile *epfile = kiocb->ki_filp->private_data;
 	struct ffs_io_data *io_data;
 	struct iovec *iovec_copy;
 	ssize_t res;
@@ -1173,7 +1228,7 @@ static ssize_t ffs_epfile_aio_read(struct kiocb *kiocb,
 
 	memcpy(iovec_copy, iovec, sizeof(struct iovec)*nr_segs);
 
-	io_data = kmalloc(sizeof(*io_data), GFP_KERNEL);
+	io_data = kzalloc(sizeof(*io_data), GFP_KERNEL);
 	if (unlikely(!io_data)) {
 		kfree(iovec_copy);
 		return -ENOMEM;
@@ -1186,13 +1241,15 @@ static ssize_t ffs_epfile_aio_read(struct kiocb *kiocb,
 	io_data->nr_segs = nr_segs;
 	io_data->len = kiocb->ki_nbytes;
 	io_data->mm = current->mm;
+	io_data->ffs = epfile->ffs;
 
 	kiocb->private = io_data;
 
-	kiocb->ki_cancel = ffs_aio_cancel;
+	ffs_aio_set_cancel(kiocb);
 
 	res = ffs_epfile_io(kiocb->ki_filp, io_data);
 	if (res != -EIOCBQUEUED) {
+		ffs_aio_detach(io_data);
 		kfree(io_data);
 		kfree(iovec_copy);
 	}
