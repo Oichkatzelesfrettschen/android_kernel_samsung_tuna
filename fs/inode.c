@@ -185,6 +185,12 @@ int inode_init_always(struct super_block *sb, struct inode *inode)
 	inode->i_cdev = NULL;
 	inode->i_rdev = 0;
 	inode->dirtied_when = 0;
+	/*
+	 * i_dentry shares storage with i_rcu, so an inode freed through
+	 * call_rcu() returns to its slab with RCU callback words in the alias
+	 * list; every allocation starts that list empty.
+	 */
+	INIT_LIST_HEAD(&inode->i_dentry);
 
 	if (security_inode_alloc(inode))
 		goto out;
