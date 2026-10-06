@@ -63,6 +63,8 @@
 
 static DEFINE_MUTEX(cgroup_mutex);
 
+static struct file_system_type compat_cgroup2_fs_type;
+
 /*
  * Generate an array of cgroup subsystem pointers. At boot time, this is
  * populated up to CGROUP_BUILTIN_SUBSYS_COUNT, and modular subsystems are
@@ -1276,6 +1278,10 @@ static int cgroup_remount(struct super_block *sb, int *flags, char *data)
 	struct cgroup *cgrp = &root->top_cgroup;
 	struct cgroup_sb_opts opts;
 
+	/* A cgroup2 mount has no options to change; the VFS applies the flags. */
+	if (sb->s_type == &compat_cgroup2_fs_type)
+		return 0;
+
 	mutex_lock(&cgrp->dentry->d_inode->i_mutex);
 	mutex_lock(&cgroup_mutex);
 
@@ -1491,12 +1497,22 @@ static struct dentry *cgroup_mount(struct file_system_type *fs_type,
 	struct super_block *sb;
 	struct cgroupfs_root *new_root;
 
-	/* First find the desired set of subsystems */
-	mutex_lock(&cgroup_mutex);
-	ret = parse_cgroupfs_options(data, &opts);
-	mutex_unlock(&cgroup_mutex);
-	if (ret)
-		goto out_err;
+	/*
+	 * A cgroup2 mount carries no subsystem options: it is a hierarchy
+	 * with no subsystems attached, so its directories hold tasks and
+	 * nothing else.
+	 */
+	if (fs_type == &compat_cgroup2_fs_type) {
+		memset(&opts, 0, sizeof(opts));
+		opts.none = true;
+	} else {
+		/* First find the desired set of subsystems */
+		mutex_lock(&cgroup_mutex);
+		ret = parse_cgroupfs_options(data, &opts);
+		mutex_unlock(&cgroup_mutex);
+		if (ret)
+			goto out_err;
+	}
 
 	/*
 	 * Allocate a new cgroup root. We may not need it if we're
@@ -1516,6 +1532,8 @@ static struct dentry *cgroup_mount(struct file_system_type *fs_type,
 		cgroup_drop_root(opts.new_root);
 		goto drop_modules;
 	}
+	if (fs_type == &compat_cgroup2_fs_type)
+		sb->s_magic = CGROUP2_SUPER_MAGIC;
 
 	root = sb->s_fs_info;
 	BUG_ON(!root);
@@ -1675,6 +1693,12 @@ static void cgroup_kill_sb(struct super_block *sb) {
 	kill_litter_super(sb);
 	cgroup_drop_root(root);
 }
+
+static struct file_system_type compat_cgroup2_fs_type = {
+	.name = "cgroup2",
+	.mount = cgroup_mount,
+	.kill_sb = cgroup_kill_sb,
+};
 
 static struct file_system_type cgroup_fs_type = {
 	.name = "cgroup",
@@ -4518,6 +4542,13 @@ int __init cgroup_init(void)
 		goto out;
 	}
 
+	err = register_filesystem(&compat_cgroup2_fs_type);
+	if (err < 0) {
+		unregister_filesystem(&cgroup_fs_type);
+		kobject_put(cgroup_kobj);
+		goto out;
+	}
+
 	proc_create("cgroups", 0, NULL, &proc_cgroupstats_operations);
 
 out:
@@ -4568,13 +4599,22 @@ static int proc_cgroup_show(struct seq_file *m, void *v)
 		struct cgroup *cgrp;
 		int count = 0;
 
-		seq_printf(m, "%d:", root->hierarchy_id);
-		for_each_subsys(root, ss)
-			seq_printf(m, "%s%s", count++ ? "," : "", ss->name);
-		if (strlen(root->name))
-			seq_printf(m, "%sname=%s", count ? "," : "",
-				   root->name);
-		seq_putc(m, ':');
+		/*
+		 * The cgroup2 hierarchy reports as the unified hierarchy,
+		 * "0::<path>", the line libprocessgroup locates a task by.
+		 */
+		if (root->sb && root->sb->s_type == &compat_cgroup2_fs_type) {
+			seq_puts(m, "0::");
+		} else {
+			seq_printf(m, "%d:", root->hierarchy_id);
+			for_each_subsys(root, ss)
+				seq_printf(m, "%s%s", count++ ? "," : "",
+					   ss->name);
+			if (strlen(root->name))
+				seq_printf(m, "%sname=%s", count ? "," : "",
+					   root->name);
+			seq_putc(m, ':');
+		}
 		cgrp = task_cgroup_from_root(tsk, root);
 		retval = cgroup_path(cgrp, buf, PAGE_SIZE);
 		if (retval < 0)
