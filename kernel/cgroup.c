@@ -1278,6 +1278,10 @@ static int cgroup_remount(struct super_block *sb, int *flags, char *data)
 	struct cgroup *cgrp = &root->top_cgroup;
 	struct cgroup_sb_opts opts;
 
+	/* A cgroup2 mount has no options to change; the VFS applies the flags. */
+	if (sb->s_type == &compat_cgroup2_fs_type)
+		return 0;
+
 	mutex_lock(&cgrp->dentry->d_inode->i_mutex);
 	mutex_lock(&cgroup_mutex);
 
@@ -1528,6 +1532,8 @@ static struct dentry *cgroup_mount(struct file_system_type *fs_type,
 		cgroup_drop_root(opts.new_root);
 		goto drop_modules;
 	}
+	if (fs_type == &compat_cgroup2_fs_type)
+		sb->s_magic = CGROUP2_SUPER_MAGIC;
 
 	root = sb->s_fs_info;
 	BUG_ON(!root);
@@ -4593,13 +4599,22 @@ static int proc_cgroup_show(struct seq_file *m, void *v)
 		struct cgroup *cgrp;
 		int count = 0;
 
-		seq_printf(m, "%d:", root->hierarchy_id);
-		for_each_subsys(root, ss)
-			seq_printf(m, "%s%s", count++ ? "," : "", ss->name);
-		if (strlen(root->name))
-			seq_printf(m, "%sname=%s", count ? "," : "",
-				   root->name);
-		seq_putc(m, ':');
+		/*
+		 * The cgroup2 hierarchy reports as the unified hierarchy,
+		 * "0::<path>", the line libprocessgroup locates a task by.
+		 */
+		if (root->sb && root->sb->s_type == &compat_cgroup2_fs_type) {
+			seq_puts(m, "0::");
+		} else {
+			seq_printf(m, "%d:", root->hierarchy_id);
+			for_each_subsys(root, ss)
+				seq_printf(m, "%s%s", count++ ? "," : "",
+					   ss->name);
+			if (strlen(root->name))
+				seq_printf(m, "%sname=%s", count ? "," : "",
+					   root->name);
+			seq_putc(m, ':');
+		}
 		cgrp = task_cgroup_from_root(tsk, root);
 		retval = cgroup_path(cgrp, buf, PAGE_SIZE);
 		if (retval < 0)
