@@ -42,6 +42,7 @@
 #include <asm/sched_clock.h>
 #include <plat/common.h>
 #include <plat/omap_hwmod.h>
+#include <plat/omap44xx.h>
 
 #include "timer-gp.h"
 #include "dmtimer.h"
@@ -54,6 +55,28 @@ static struct clock_event_device clockevent_gpt;
 static u8 __initdata gptimer_id = 1;
 static u8 __initdata inited;
 struct omap_dm_timer *gptimer_wakeup;
+
+#ifdef CONFIG_ARCH_OMAP4
+#define OMAP4_GLOBAL_TIMER_OFFSET	0x200
+#define OMAP4_GLOBAL_TIMER_COUNTER	0x00
+#define OMAP4_GLOBAL_TIMER_CONTROL	0x08
+#define OMAP4_GLOBAL_TIMER_ENABLE	(1 << 0)
+
+static void __iomem *omap4_global_timer_base;
+
+/*
+ * The Cortex-A9 MPCore global timer counts PERIPHCLK (MPU DPLL / 2) and is
+ * shared by both CPUs; its low word is get_cycles() and therefore
+ * random_get_entropy(). It reads 0 until omap2_gp_timer_init() maps it.
+ */
+unsigned long omap4_get_cycles(void)
+{
+	if (!omap4_global_timer_base)
+		return 0;
+
+	return __raw_readl(omap4_global_timer_base + OMAP4_GLOBAL_TIMER_COUNTER);
+}
+#endif
 
 static irqreturn_t omap2_gp_timer_interrupt(int irq, void *dev_id)
 {
@@ -247,6 +270,21 @@ static void __init omap2_gp_clocksource_init(void)
 
 static void __init omap2_gp_timer_init(void)
 {
+#ifdef CONFIG_ARCH_OMAP4
+	if (cpu_is_omap44xx()) {
+		void __iomem *base = ioremap(OMAP44XX_SCU_BASE +
+					     OMAP4_GLOBAL_TIMER_OFFSET, SZ_256);
+
+		if (base) {
+			__raw_writel(__raw_readl(base + OMAP4_GLOBAL_TIMER_CONTROL) |
+				     OMAP4_GLOBAL_TIMER_ENABLE,
+				     base + OMAP4_GLOBAL_TIMER_CONTROL);
+			omap4_global_timer_base = base;
+		} else {
+			pr_warn("OMAP4 global timer unmapped; get_cycles() reads 0\n");
+		}
+	}
+#endif
 #ifdef CONFIG_LOCAL_TIMERS
 	if (cpu_is_omap44xx()) {
 		twd_base = ioremap(OMAP44XX_LOCAL_TWD_BASE, SZ_256);
