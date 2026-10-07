@@ -248,6 +248,7 @@
 #include <linux/fs.h>
 #include <linux/genhd.h>
 #include <linux/interrupt.h>
+#include <linux/mutex.h>
 #include <linux/mm.h>
 #include <linux/spinlock.h>
 #include <linux/kthread.h>
@@ -408,6 +409,7 @@ static struct poolinfo {
 static DECLARE_WAIT_QUEUE_HEAD(random_read_wait);
 static DECLARE_WAIT_QUEUE_HEAD(random_write_wait);
 static DECLARE_WAIT_QUEUE_HEAD(urandom_init_wait);
+static DEFINE_MUTEX(urandom_init_mutex);
 static struct fasync_struct *fasync;
 
 /**********************************************************************
@@ -886,6 +888,52 @@ void add_interrupt_randomness(int irq, int irq_flags)
 			fast_pool->last_timer_intr = 0;
 	}
 	credit_entropy_bits(r, 1);
+}
+
+/*
+ * The waiter mixes a counter sample after every schedule() return, so the
+ * entropy comes from when the scheduler and interrupts let it run; the
+ * per-jiffy timer only credits one bit for the samples mixed since the
+ * previous expiry.
+ */
+static void entropy_timer(unsigned long data)
+{
+	credit_entropy_bits(&nonblocking_pool, 1);
+}
+
+static int try_to_generate_entropy(void)
+{
+	struct timer_list timer;
+	unsigned long now;
+	int ret;
+
+	now = random_get_entropy();
+	if (now == random_get_entropy())
+		return 0;
+
+	ret = mutex_lock_interruptible(&urandom_init_mutex);
+	if (ret)
+		return ret;
+	if (nonblocking_pool.initialized) {
+		ret = 0;
+		goto out_unlock;
+	}
+
+	setup_timer_on_stack(&timer, entropy_timer, 0);
+	while (!nonblocking_pool.initialized && !signal_pending(current)) {
+		if (!timer_pending(&timer))
+			mod_timer(&timer, jiffies + 1);
+		mix_pool_bytes(&nonblocking_pool, &now, sizeof(now), NULL);
+		schedule();
+		now = random_get_entropy();
+	}
+	del_timer_sync(&timer);
+	destroy_timer_on_stack(&timer);
+
+	ret = signal_pending(current) ? -ERESTARTSYS : 0;
+out_unlock:
+	mutex_unlock(&urandom_init_mutex);
+	return ret;
 }
 
 #ifdef CONFIG_BLOCK
@@ -1450,6 +1498,8 @@ const struct file_operations urandom_fops = {
 SYSCALL_DEFINE3(getrandom, char __user *, buf, size_t, count,
 		unsigned int, flags)
 {
+	int ret;
+
 	if (flags & ~(GRND_NONBLOCK|GRND_RANDOM))
 		return -EINVAL;
 
@@ -1462,6 +1512,9 @@ SYSCALL_DEFINE3(getrandom, char __user *, buf, size_t, count,
 	if (unlikely(nonblocking_pool.initialized == 0)) {
 		if (flags & GRND_NONBLOCK)
 			return -EAGAIN;
+		ret = try_to_generate_entropy();
+		if (ret)
+			return ret;
 		wait_event_interruptible(urandom_init_wait,
 					 nonblocking_pool.initialized);
 		if (signal_pending(current))
