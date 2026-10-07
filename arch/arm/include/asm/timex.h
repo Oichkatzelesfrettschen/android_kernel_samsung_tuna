@@ -18,7 +18,11 @@ typedef unsigned long cycles_t;
 
 static inline cycles_t get_cycles (void)
 {
+#ifdef CONFIG_ARCH_OMAP4
+	return omap4_get_cycles();
+#else
 	return 0;
+#endif
 }
 
 #endif
